@@ -1,2 +1,8 @@
-# autoBagging
-autoBagging para Classificação e Regressão, um sistema que seja capaz de avaliar modelos de Bagging no ambito de MtL (Meta Learning)
+# autoBagging Python
+
+## ML (Machine Learning) & Mtl (MetaLearning)
+Um autoML System que seja capaz de avaliar modelos de Bagging num certo tipo de dataset.
+
+autoBaggingClassifier:
+
+autoBaggingRegression:
