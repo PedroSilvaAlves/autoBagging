@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-class autoBagging:
+class autoBaggingClassifier:
 
     def __init__(type):
         if type == 'create':
