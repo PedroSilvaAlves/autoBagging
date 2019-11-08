@@ -13,11 +13,11 @@ def map_object_to_mf(attr_dict, mf):
 
     # MATRIX OBJECTS. Example: count number of rows.
     if mf.get_matrix_applicable() == True:
-        raise NotImplementedError
-
+        i=-1
     # Metafunction that can handle both numerical and categorical variables
     if mf.get_numerical_arity()==mf.get_categorical_arity():
-        raise NotImplementedError
+        i=-1
+        #raise NotImplementedError
 
     # Classification dataset and metafunction like entropy (categorical arity = 1)
     if (mf.get_numerical_arity()==0) and (mf.get_categorical_arity()==1) and (len(classLabel)!=0):
