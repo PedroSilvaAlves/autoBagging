@@ -90,10 +90,8 @@ FileNameDataset.append('./datasets/heart.csv')
 TargetNames.append('target')
 FileNameDataset.append('./datasets/categoricalfeatureencoding.csv')
 TargetNames.append('target')
-FileNameDataset.append('./datasets/heart2.csv')
-TargetNames.append('target')
-#FileNameDataset.append('./datasets/sanfranciscocrime.csv')
-#TargetNames.append('Category')
+FileNameDataset.append('./datasets/sanfranciscocrime_split.csv')
+TargetNames.append('Category')
 
 # Metafeatures
 post_processing_steps = {'mean': Mean(),
