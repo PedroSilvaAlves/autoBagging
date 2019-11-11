@@ -7,6 +7,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import BaggingClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.model_selection import ParameterGrid
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+from sklearn.impute import SimpleImputer
 from metafeatures.core.object_analyzer import analyze_pd_dataframe
 from metafeatures.meta_functions.entropy import Entropy
 from metafeatures.meta_functions import basic as basic_meta_functions
@@ -20,10 +23,10 @@ from metafeatures.core.engine import metafeature_generator
 
 class autoBaggingClassifier:
 
-    base_estimators = {    'Naive Bayes': GaussianNB(),
-                           'Decision Tree (max_depth=1)': DecisionTreeClassifier(max_depth=1),
+    base_estimators = {    'Decision Tree (max_depth=1)': DecisionTreeClassifier(max_depth=1),
                            'Decision Tree (max_depth=2)': DecisionTreeClassifier(max_depth=2),
                            'Decision Tree (max_depth=3)': DecisionTreeClassifier(max_depth=3),
+                           'Naive Bayes': GaussianNB(),
                            'Majority Class': DummyClassifier()}
     grid = ParameterGrid({"n_estimators" : [50,100,200],
                            "bootstrap" : [True, False]
@@ -58,23 +61,33 @@ class autoBaggingClassifier:
                     meta_features_estematic['Number of Classes'] = dataset[target].unique().shape[0]
                     # Falta as previções
                     # Então
+                    # É necessário dividir os exemplos e os targets
+                    X = SimpleImputer().fit_transform(dataset.drop(target,axis=1))
+                    y = dataset[target]
+                    scoring = 'accuracy'
                     # Criar os modelos base
-
                     for params in self.grid: # Combinações de Parametros
                         # Criar uma Copia das metafeatures
                         meta_features_final = meta_features_estematic.copy()
-                        for name, base_estimator in self.base_estimators: # em cada combinação dos parametros adiciona uma feature por algoritmo base
+                        for base_estimator in self.base_estimators: # em cada combinação dos parametros adiciona uma feature por algoritmo base
                             # Criar modelo
-                            bagging_workflow = BaggingClassifier(base_estimator=base_estimator,
+                            print(base_estimator)
+                            #print(self.base_estimators[base_estimator])
+                            bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
                                               random_state=0,
                                               **params)
+                            #Avaliar Algoritmos
+                            kfold = KFold(n_splits=5, random_state=0)
+                            cv_results = cross_val_score(bagging_workflow, X, y, cv=kfold, scoring=scoring)
+
                             # Adicionar a lista de Workflows
                             self.bagging_workflows.append(bagging_workflow)
-
-                            # adicionar ao array, uma previção do algoritmo atual                            
-                            meta_features_final['Landmark: ' + name] # = bagging_workflow.score() ou cross validation
-
+                            # adicionar ao array, uma previção do algoritmo atual
+                            print("Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))                        
+                            meta_features_final['Algorithm: ' + base_estimator]  = cv_results.mean() # = bagging_workflow.score() ou cross validation
+                        
                         meta_features.append(meta_features_final)   # Este array contem as metafeatures criadas e as previções dos algoritmos base
+
 
                     #Fit & Validate
                     
@@ -83,7 +96,7 @@ class autoBaggingClassifier:
                     
             self.meta_data = pd.DataFrame(meta_features)
             self.meta_data.to_csv('meta_data.csv')
-            print(self.meta_data)
+            return self
 
     def _metafeatures(self, dataset,target,meta_functions_categorical,meta_functions_numerical,post_processing_steps):
             
@@ -95,7 +108,6 @@ class autoBaggingClassifier:
         _mean = Mean()
         _sd = StandardDeviation()
         _nagg = NonAggregated()
-
         #Run experiments
         metafeatures_values, metafeatures_names = metafeature_generator(
         dataset, # Pandas Dataframe
@@ -133,8 +145,10 @@ FileNameDataset = []
 
 FileNameDataset.append('./datasets/heart.csv')
 TargetNames.append('target')
-FileNameDataset.append('./datasets/categoricalfeatureencoding.csv')
-TargetNames.append('target')
+FileNameDataset.append('./datasets/titanic.csv')
+TargetNames.append('Survived')
+#FileNameDataset.append('./datasets/categoricalfeatureencoding.csv')
+#TargetNames.append('target')
 #FileNameDataset.append('./datasets/sanfranciscocrime_split.csv')
 #TargetNames.append('Category')
 
@@ -155,7 +169,3 @@ meta_functions_numerical = {'mean': basic_meta_functions.Mean(),
 model = autoBaggingClassifier('create')
 model.fit(FileNameDataset,TargetNames, meta_functions_categorical, meta_functions_numerical, post_processing_steps)
 
-#Avaliar Algoritmos
-#scoring = 'accuracy'
-#kfold = KFold(n_splits=10, random_state=0)
-#cv_results = cross_val_score(model, X, y, cv=kfold, scoring=scoring)
