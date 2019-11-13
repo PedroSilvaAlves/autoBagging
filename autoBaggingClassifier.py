@@ -31,6 +31,7 @@ class autoBaggingClassifier:
         self.base_estimators = {    'Decision Tree (max_depth=1)': DecisionTreeClassifier(max_depth=1,random_state=0),
                            'Decision Tree (max_depth=2)': DecisionTreeClassifier(max_depth=2,random_state=0),
                            'Decision Tree (max_depth=3)': DecisionTreeClassifier(max_depth=3,random_state=0),
+                           'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4,random_state=0),
                            'Naive Bayes': GaussianNB(),
                            'Majority Class': DummyClassifier(random_state=0)}
         self.grid = ParameterGrid({"n_estimators" : [50,100,200],
@@ -46,7 +47,8 @@ class autoBaggingClassifier:
         self.datasets = []          # Vai conter todos os Datasets
         self.bagging_workflows = [] # Vai conter todos os Bagging workflows
         if self.type == 'create':
-            meta_features = []      # Vai conter todas as Metafeatures, uma linha um exemplo de um algoritmo com um certo tipo de parametros
+            x_meta = []      # Vai conter todas as Metafeatures, uma linha um exemplo de um algoritmo com um certo tipo de parametros
+            y_meta = []
             for file_name, target in zip(file_name_datasets, target_names):
                 print(file_name)
                 dataset = pd.read_csv(file_name)
@@ -61,11 +63,9 @@ class autoBaggingClassifier:
                     scoring = 'accuracy'
                     # Criar base-models
                     for params in self.grid: # Combinações de Parametros
-                        meta_features_final = meta_features_estematic.copy()
+                        meta_features = meta_features_estematic.copy()
                         Rank = {}
                         for base_estimator in self.base_estimators: # Em cada combinação dos parametros adiciona uma feature por algoritmo base
-                            print(base_estimator)
-                            
                             # Criar modelo
                             bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
                                               random_state=0,
@@ -79,28 +79,37 @@ class autoBaggingClassifier:
                             self.bagging_workflows.append(bagging_workflow)
 
                             # Adicionar ao array de metafeatures, um score do algoritmo atual
-                            print("Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
+                            print(base_estimator," --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
                             Rank[base_estimator] = cv_results.mean()
-                            meta_features_final['bootstrap'] = np.multiply(params['bootstrap'],1)
-                            meta_features_final['n_estimators'] = params['n_estimators']
+                            # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
+                            meta_features['bootstrap'] = np.multiply(params['bootstrap'],1)
+                            meta_features['n_estimators'] = params['n_estimators']
 
-                        print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
+                        #print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
+                        
                         i = 1
                         for base_estimator in sorted(Rank, key=Rank.__getitem__ ,reverse=True):
-                            meta_features_final['Algorithm:' + base_estimator] = i
+                            meta_features['Algorithm:' + base_estimator] = i
+                            Rank[base_estimator] = i
                             i=i+1
-
-
-                        meta_features.append(meta_features_final)   # Este array a adiconar contem as metafeatures do dataset e o scores do algoritmo base a testar
+                            array_rank = []
+                        for value in Rank.values():
+                            array_rank.append(value)
+                        #print(array_rank)
+                        y_meta.append(array_rank)
+                        x_meta.append(meta_features)   # Este array a adiconar contem as metafeatures do dataset e o scores do algoritmo base a testar
 
             # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
-            self.meta_data = pd.DataFrame(meta_features)
+            self.meta_data = pd.DataFrame(x_meta)
             self.meta_data.to_csv('meta_data.csv') # Guardar Meta Data num ficheiro .CSV
             
 
             # Criar o target para o Meta Data
-
-            # *TO-DO*
+            print('-------X--------')
+            print('----->Exel<-----')
+            print('-------Y--------')
+            y_meta = np.array(y_meta)
+            print(y_meta)
 
             # Criar o Meta Model XGBOOST
             meta_model = xgb.XGBRegressor(  colsample_bytree = 0.3,
@@ -111,10 +120,19 @@ class autoBaggingClassifier:
             self.meta_model = MultiOutputRegressor(meta_model)
 
             # Aplicar Learning algorithm
-            # meta_model.fit(X_train,y_train)
+            
+            #meta_model.fit(self.meta_data,y_meta)
 
             # Avaliar meta_model
+
+            # Get dataset de teste
+            #dataset = pd.read_csv('./datasets/test/weatherAUS.csv')
+            #dataset.drop('RISK_MM', axis=1)
+            #target_test = 'RainTomorrow'
+            #X_test = self._metafeatures(dataset.drop(target_test,axis=1),target,meta_functions,post_processing_steps)
             #preds = meta_model.predict(X_test)
+
+            #print(preds)
 
             return self
     def predict(self, dataset, targetname):
@@ -189,6 +207,7 @@ post_processing_steps = [Mean(),
                          StandardDeviation(),
                          Skew(),
                          Kurtosis()]
+]
 
 meta_functions = [Entropy(),
                   PearsonCorrelation(),
