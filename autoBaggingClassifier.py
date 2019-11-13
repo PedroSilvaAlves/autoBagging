@@ -11,6 +11,7 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.model_selection import KFold
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import SimpleImputer
+from sklearn.metrics import cohen_kappa_score
 from metafeatures.core.object_analyzer import analyze_pd_dataframe
 from metafeatures.meta_functions.entropy import Entropy
 from metafeatures.meta_functions import basic as basic_meta_functions
@@ -72,21 +73,25 @@ class autoBaggingClassifier:
                                               **params)
 
                             # Avaliar Algoritmos
-                            kfold = KFold(n_splits=10, random_state=0)
-                            cv_results = cross_val_score(bagging_workflow, X, y, cv=kfold, scoring=scoring)
-
+                            #kfold = KFold(n_splits=4, random_state=0)
+                            #cv_results = cross_val_score(bagging_workflow, X, y, cv=kfold, scoring=scoring)
+                            #print(base_estimator," --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
+                            #Rank[base_estimator] = cv_results.mean()
+                            
+                            
+                            # Treinar o modelo
+                            bagging_workflow.fit(X,y)
+                            # Adicionar ao array de metafeatures, landmark do algoritmo atual
+                            Rank[base_estimator] = cohen_kappa_score(y,bagging_workflow.predict(X))
+                            print(base_estimator, " --> Score: %0.3f)" % Rank[base_estimator])
                             # Adicionar a lista de Workflows
                             self.bagging_workflows.append(bagging_workflow)
 
-                            # Adicionar ao array de metafeatures, um score do algoritmo atual
-                            print(base_estimator," --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
-                            Rank[base_estimator] = cv_results.mean()
                             # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                             meta_features['bootstrap'] = np.multiply(params['bootstrap'],1)
                             meta_features['n_estimators'] = params['n_estimators']
 
                         #print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
-                        
                         i = 1
                         for base_estimator in sorted(Rank, key=Rank.__getitem__ ,reverse=True):
                             meta_features['Algorithm:' + base_estimator] = i
@@ -116,7 +121,7 @@ class autoBaggingClassifier:
                                             learning_rate = 0.1,
                                             max_depth = 5,
                                             alpha = 10,
-                                            n_estimators = 10)
+                                            n_estimators = 100)
             self.meta_model = MultiOutputRegressor(meta_model)
 
             # Aplicar Learning algorithm
@@ -207,7 +212,7 @@ post_processing_steps = [Mean(),
                          StandardDeviation(),
                          Skew(),
                          Kurtosis()]
-]
+
 
 meta_functions = [Entropy(),
                   PearsonCorrelation(),
