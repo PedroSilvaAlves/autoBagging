@@ -62,7 +62,7 @@ class autoBaggingClassifier:
                     # Criar base-models
                     for params in self.grid: # Combinações de Parametros
                         meta_features_final = meta_features_estematic.copy()
-
+                        Rank = {}
                         for base_estimator in self.base_estimators: # Em cada combinação dos parametros adiciona uma feature por algoritmo base
                             print(base_estimator)
                             
@@ -79,9 +79,18 @@ class autoBaggingClassifier:
                             self.bagging_workflows.append(bagging_workflow)
 
                             # Adicionar ao array de metafeatures, um score do algoritmo atual
-                            print("Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))                        
-                            meta_features_final['Algorithm: ' + base_estimator]  = cv_results.mean()
-                        
+                            print("Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
+                            Rank[base_estimator] = cv_results.mean()
+                            meta_features_final['bootstrap'] = np.multiply(params['bootstrap'],1)
+                            meta_features_final['n_estimators'] = params['n_estimators']
+
+                        print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
+                        i = 1
+                        for base_estimator in sorted(Rank, key=Rank.__getitem__ ,reverse=True):
+                            meta_features_final['Algorithm:' + base_estimator] = i
+                            i=i+1
+
+
                         meta_features.append(meta_features_final)   # Este array a adiconar contem as metafeatures do dataset e o scores do algoritmo base a testar
 
             # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
