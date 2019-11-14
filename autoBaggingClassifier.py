@@ -166,7 +166,7 @@ class autoBaggingClassifier:
             preds = self.meta_model.predict(X_test)
             #print(preds)
             print("Recommended Bagging workflow is: ")
-            print("Number of models: ", preds[0][6])
+            print("Number of models: %1.0f" % preds[0][6])
             bootstrap = False
             if preds[0][7] > 0.5:
                 bootstrap = True
@@ -185,7 +185,7 @@ class autoBaggingClassifier:
                 5: "Majority Class"}
             print("Algorithm : ", switcher.get(algorithm_index))
 
-            return self
+        return self
     def predict(self, dataset, targetname):
         if self.type == 'predict':
             if self._validateDataset(dataset,targetname):
