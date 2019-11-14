@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 
+from sklearn.preprocessing import LabelEncoder
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import BaggingClassifier
@@ -12,6 +13,7 @@ from sklearn.model_selection import KFold
 from sklearn.model_selection import cross_val_score
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import cohen_kappa_score
+from sklearn.metrics import mean_squared_error
 from metafeatures.core.object_analyzer import analyze_pd_dataframe
 from metafeatures.meta_functions.entropy import Entropy
 from metafeatures.meta_functions import basic as basic_meta_functions
@@ -21,6 +23,7 @@ from metafeatures.meta_functions.spearman_correlation import SpearmanCorrelation
 from metafeatures.post_processing_functions.basic import Mean, StandardDeviation, Skew, Kurtosis
 from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
+import warnings
 
 class autoBaggingClassifier:
         
@@ -51,8 +54,13 @@ class autoBaggingClassifier:
             x_meta = []      # Vai conter todas as Metafeatures, uma linha um exemplo de um algoritmo com um certo tipo de parametros
             y_meta = []
             for file_name, target in zip(file_name_datasets, target_names):
-                print(file_name)
-                dataset = pd.read_csv(file_name)
+                print("Creating Meta-features for: ",file_name)
+                try:
+                    dataset = pd.read_csv(file_name)
+                except FileNotFoundError:
+                    print("Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
+                    quit()
+
                 self.datasets.append(dataset)
                 if self._validateDataset(dataset,target):
                     # MetaFeatures
@@ -61,7 +69,7 @@ class autoBaggingClassifier:
                     # É necessário dividir o dataset em exemplos e os targets
                     X = SimpleImputer().fit_transform(dataset.drop(target,axis=1))
                     y = dataset[target]
-                    scoring = 'accuracy'
+                    #scoring = 'accuracy'
                     # Criar base-models
                     for params in self.grid: # Combinações de Parametros
                         meta_features = meta_features_estematic.copy()
@@ -83,13 +91,14 @@ class autoBaggingClassifier:
                             bagging_workflow.fit(X,y)
                             # Adicionar ao array de metafeatures, landmark do algoritmo atual
                             Rank[base_estimator] = cohen_kappa_score(y,bagging_workflow.predict(X))
-                            print(base_estimator, " --> Score: %0.3f)" % Rank[base_estimator])
-                            # Adicionar a lista de Workflows
-                            self.bagging_workflows.append(bagging_workflow)
-
+                            #print(params)
+                            #Rank_Params[base_estimator] = params
+                            #print(base_estimator, " --> Score: %0.3f)" % Rank[base_estimator])
                             # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                             meta_features['bootstrap'] = np.multiply(params['bootstrap'],1)
                             meta_features['n_estimators'] = params['n_estimators']
+                            # Adicionar a lista de Workflows
+                            self.bagging_workflows.append(bagging_workflow)
 
                         #print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
                         i = 1
@@ -101,7 +110,9 @@ class autoBaggingClassifier:
                         for value in Rank.values():
                             array_rank.append(value)
                         #print(array_rank)
-                        y_meta.append(array_rank)
+                        array_rank.append(params['n_estimators'])
+                        array_rank.append(np.multiply(params['bootstrap'],1))
+                        y_meta.append(array_rank)      # Este array contem o target
                         x_meta.append(meta_features)   # Este array a adiconar contem as metafeatures do dataset e o scores do algoritmo base a testar
 
             # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
@@ -110,34 +121,69 @@ class autoBaggingClassifier:
             
 
             # Criar o target para o Meta Data
-            print('-------X--------')
-            print('----->Exel<-----')
-            print('-------Y--------')
             y_meta = np.array(y_meta)
-            print(y_meta)
+            # Get o test Dataset
+            dataset = pd.read_csv('./datasets/test/weatherAUS.csv')
+            dataset = dataset.drop('RISK_MM', axis=1)
+            target_test = 'RainTomorrow'
+            meta_features = self._metafeatures(dataset,target_test,meta_functions,post_processing_steps)
+            X_test = pd.DataFrame(meta_features,index=[0])
+
+            # Tratar dos dados para entrar no XGBOOST
+            for f in self.meta_data.columns: 
+                if self.meta_data[f].dtype=='object': 
+                    lbl = LabelEncoder() 
+                    lbl.fit(list(self.meta_data[f].values)) 
+                    self.meta_data[f] = lbl.transform(list(self.meta_data[f].values))
+
+            for f in X_test.columns: 
+                if X_test[f].dtype=='object': 
+                    lbl = LabelEncoder() 
+                    lbl.fit(list(X_test[f].values)) 
+                    X_test[f] = lbl.transform(list(X_test[f].values))
+
+            self.meta_data.fillna((-999), inplace=True) 
+            X_test.fillna((-999), inplace=True)
+
+            self.meta_data=np.array(self.meta_data) 
+            X_test=np.array(X_test) 
+            self.meta_data = self.meta_data.astype(float) 
+            X_test = X_test.astype(float)
 
             # Criar o Meta Model XGBOOST
-            meta_model = xgb.XGBRegressor(  colsample_bytree = 0.3,
+            meta_model = xgb.XGBRegressor(  objective="reg:squarederror",
+                                            colsample_bytree = 0.3,
                                             learning_rate = 0.1,
                                             max_depth = 5,
                                             alpha = 10,
                                             n_estimators = 100)
             self.meta_model = MultiOutputRegressor(meta_model)
-
-            # Aplicar Learning algorithm
             
-            #meta_model.fit(self.meta_data,y_meta)
+            # Aplicar Learning algorithm
+            self.meta_model.fit(self.meta_data,y_meta)
 
-            # Avaliar meta_model
-
-            # Get dataset de teste
-            #dataset = pd.read_csv('./datasets/test/weatherAUS.csv')
-            #dataset.drop('RISK_MM', axis=1)
-            #target_test = 'RainTomorrow'
-            #X_test = self._metafeatures(dataset.drop(target_test,axis=1),target,meta_functions,post_processing_steps)
-            #preds = meta_model.predict(X_test)
-
+            # Prever o melhor algoritmo
+            preds = self.meta_model.predict(X_test)
             #print(preds)
+            print("Recommended Bagging workflow is: ")
+            print("Number of models: ", preds[0][6])
+            bootstrap = False
+            if preds[0][7] > 0.5:
+                bootstrap = True
+            print("Bootstrap: ", bootstrap)
+            algorithm_score = preds[0][0]
+            for i in range(0,5):
+                if preds[0][i] < algorithm_score:
+                    algorithm_score = preds[0][i]
+                    algorithm_index = i
+            switcher = {
+                0: "Decision Tree (max_depth=4)",
+                1: "Decision Tree (max_depth=3)",
+                2: "Naive Bayes",
+                3: "Decision Tree (max_depth=2)",
+                4: "Decision Tree (max_depth=1)",
+                5: "Majority Class"}
+            print("Algorithm : ", switcher.get(algorithm_index))
 
             return self
     def predict(self, dataset, targetname):
@@ -148,12 +194,11 @@ class autoBaggingClassifier:
     def _metafeatures(self, dataset,target,meta_functions,post_processing_steps):
 
         metafeatures_values, metafeatures_names = metafeature_generator(
-        dataset, # Pandas Dataframe
-        [target], # Name of the target variable
-        meta_functions, # Metafunctions
-        post_processing_steps # Post-processing functions
+            dataset, # Pandas Dataframe
+            [target], # Name of the target variable
+            meta_functions, # Metafunctions
+            post_processing_steps # Post-processing functions
         )
-        
         metafeatures_values = np.array(metafeatures_values)
         metafeatures_names = np.array(metafeatures_names)
         meta_features = dict(zip(metafeatures_names,metafeatures_values))
@@ -161,6 +206,54 @@ class autoBaggingClassifier:
         meta_features['Number of Examples'] = dataset.shape[0]
         meta_features['Number of Features'] = dataset.shape[1]
         meta_features['Number of Classes'] = dataset[target].unique().shape[0]
+        meta_features_allnames = ['Features.SpearmanCorrelation.Mean',
+                                'Features.SpearmanCorrelation.StandardDeviation',
+                                'Features.SpearmanCorrelation.Skew',
+                                'Features.SpearmanCorrelation.Kurtosis',
+                                'FeaturesLabels.SpearmanCorrelation.Mean',
+                                'FeaturesLabels.SpearmanCorrelation.StandardDeviation',
+                                'FeaturesLabels.SpearmanCorrelation.Skew',
+                                'FeaturesLabels.SpearmanCorrelation.Kurtosis',
+                                'Features.Mean.Mean',
+                                'Features.Mean.StandardDeviation',
+                                'Features.Mean.Skew',
+                                'Features.Mean.Kurtosis',
+                                'Features.StandardDeviation.Mean',
+                                'Features.StandardDeviation.StandardDeviation',
+                                'Features.StandardDeviation.Skew',
+                                'Features.StandardDeviation.Kurtosis',
+                                'Features.Skew.Mean',
+                                'Features.Skew.StandardDeviation',
+                                'Features.Skew.Skew',
+                                'Features.Skew.Kurtosis',
+                                'Features.Kurtosis.Mean',
+                                'Features.Kurtosis.StandardDeviation',
+                                'Features.Kurtosis.Skew',
+                                'Features.Kurtosis.Kurtosis',
+                                'Features.Entropy.Mean',
+                                'Features.Entropy.StandardDeviation',
+                                'Features.Entropy.Skew',
+                                'Features.Entropy.Kurtosis',
+                                'Features.MutualInformation.Mean',
+                                'Features.MutualInformation.StandardDeviation',
+                                'Features.MutualInformation.Skew',
+                                'Features.MutualInformation.Kurtosis',
+                                'FeaturesLabels.MutualInformation.Mean',
+                                'FeaturesLabels.MutualInformation.StandardDeviation',
+                                'FeaturesLabels.MutualInformation.Skew',
+                                'FeaturesLabels.MutualInformation.Kurtosis',
+                                'bootstrap',
+                                'n_estimators',
+                                'Algorithm:Decision Tree (max_depth=4)',
+                                'Algorithm:Decision Tree (max_depth=3)',
+                                'Algorithm:Naive Bayes',
+                                'Algorithm:Decision Tree (max_depth=2)',
+                                'Algorithm:Decision Tree (max_depth=1)',
+                                'Algorithm:Majority Class']
+        for feature_name in meta_features_allnames:
+            if not (feature_name) in meta_features:
+                meta_features[feature_name] = np.nan
+        
         return meta_features
     
     def _bb(self,target, # Target name ?
@@ -186,23 +279,29 @@ class autoBaggingClassifier:
         #    
     
     def _validateDataset(self,dataset,targetname):
-        if dataset[targetname].dtype != 'object':
-            if sorted(dataset[targetname].unique()) != [0,1]:
-                print("Não é válido o Dataset")
-                return False
+        #if dataset[targetname].dtype != 'object':
+            #if sorted(dataset[targetname].unique()) != [0,1]:
+                #print("Não é válido o Dataset")
+               # return False
         #print("True, é valido")
         return True
 
 
 
 # MAIN FUNCTION 
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 TargetNames = []
 FileNameDataset = []
 
-FileNameDataset.append('./datasets/heart.csv')
-TargetNames.append('target')
+
 FileNameDataset.append('./datasets/titanic.csv')
 TargetNames.append('Survived')
+FileNameDataset.append('./datasets/heart.csv')
+TargetNames.append('target')
+#FileNameDataset.append('./datasets/walmart.csv')
+#TargetNames.append('TripType')
+
 #FileNameDataset.append('./datasets/categoricalfeatureencoding.csv')
 #TargetNames.append('target')
 #FileNameDataset.append('./datasets/sanfranciscocrime_split.csv')
@@ -215,7 +314,7 @@ post_processing_steps = [Mean(),
 
 
 meta_functions = [Entropy(),
-                  PearsonCorrelation(),
+                  #PearsonCorrelation(),
                   MutualInformation(),
                   SpearmanCorrelation(),
                   basic_meta_functions.Mean(),
