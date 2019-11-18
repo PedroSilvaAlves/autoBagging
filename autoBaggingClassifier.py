@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-
+import math as m
 from sklearn.preprocessing import LabelEncoder
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -41,6 +41,8 @@ class autoBaggingClassifier:
         self.grid = ParameterGrid({"n_estimators" : [50,100,200],
                            "bootstrap" : [True, False]
                          })
+        self.pruning = ParameterGrid({'pruning_method' :["bb", "mdsq"],
+                        'pruning_cp': [0.10,0.20,0.30,0.50]})
 
     def fit(self,
             file_name_datasets,     # Nome de todos os ficheiros .CSV
@@ -71,64 +73,85 @@ class autoBaggingClassifier:
                     y = dataset[target]
                     #scoring = 'accuracy'
                     # Criar base-models
-                    for params in self.grid: # Combinações de Parametros
-                        meta_features = meta_features_estematic.copy()
-                        Rank = {}
-                        for base_estimator in self.base_estimators: # Em cada combinação dos parametros adiciona uma feature por algoritmo base
-                            # Criar modelo
-                            bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
-                                              random_state=0,
-                                              **params)
+                    for pruning in self.pruning:
+                        for params in self.grid: # Combinações de Parametros
+                            meta_features = meta_features_estematic.copy()
+                            Rank = {}
+                            for base_estimator in self.base_estimators: # Combinação dos algoritmos base
+                                # Criar modelo
+                                bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
+                                                random_state=0,
+                                                **params)
 
-                            # Avaliar Algoritmos
-                            #kfold = KFold(n_splits=4, random_state=0)
-                            #cv_results = cross_val_score(bagging_workflow, X, y, cv=kfold, scoring=scoring)
-                            #print(base_estimator," --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
-                            #Rank[base_estimator] = cv_results.mean()
-                            
-                            
-                            # Treinar o modelo
-                            bagging_workflow.fit(X,y)
-                            # Adicionar ao array de metafeatures, landmark do algoritmo atual
-                            Rank[base_estimator] = cohen_kappa_score(y,bagging_workflow.predict(X))
-                            #print(params)
-                            #Rank_Params[base_estimator] = params
-                            #print(base_estimator, " --> Score: %0.3f)" % Rank[base_estimator])
-                            # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
-                            meta_features['bootstrap'] = np.multiply(params['bootstrap'],1)
-                            meta_features['n_estimators'] = params['n_estimators']
-                            # Adicionar a lista de Workflows
-                            self.bagging_workflows.append(bagging_workflow)
+                                # Avaliar Algoritmos
 
-                        #print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
-                        i = 1
-                        for base_estimator in sorted(Rank, key=Rank.__getitem__ ,reverse=True):
-                            meta_features['Algorithm:' + base_estimator] = i
-                            Rank[base_estimator] = i
-                            i=i+1
-                            array_rank = []
-                        for value in Rank.values():
-                            array_rank.append(value)
-                        #print(array_rank)
-                        array_rank.append(params['n_estimators'])
-                        array_rank.append(np.multiply(params['bootstrap'],1))
-                        y_meta.append(array_rank)      # Este array contem o target
-                        x_meta.append(meta_features)   # Este array a adiconar contem as metafeatures do dataset e o scores do algoritmo base a testar
+                                # IGNORE
+                                #kfold = KFold(n_splits=4, random_state=0)
+                                #cv_results = cross_val_score(bagging_workflow, X, y, cv=kfold, scoring=scoring)
+                                #print(base_estimator," --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
+                                #Rank[base_estimator] = cv_results.mean()
+                                #print(params)
+                                #Rank_Params[base_estimator] = params
+                                #print(base_estimator, " --> Score: %0.3f)" % Rank[base_estimator])
+                                
+                                # Treinar o modelo
+                                bagging_workflow.fit(X,y)
+                                predictions = bagging_workflow.predict(X) # Main Prediction
+                                print("Start pruning " + pruning['pruning_method'])
+                                if pruning['pruning_method'] == 'bb':
+                                    bb_index= self._bb(y, predictions, X, pruning['pruning_cp'])
+                                    print(bb_index)
+                                    bagging_workflow = bagging_workflow[bb_index]
+                                    predictions = bagging_workflow.predict(X) # Prunned Prediction
+                                else :
+                                    if pruning['pruning_method'] == 'mdsq':
+                                        mdsq_index = self._mdsq(y, predictions, X, pruning['pruning_cp'])
+                                        print(mdsq_index)
+                                        bagging_workflow = bagging_workflow[mdsq_index]
+                                        predictions = bagging_workflow.predict(X) # Prunned Prediction
+                                
+                                # Adicionar ao array de metafeatures, landmark do algoritmo atual
+                                predictions = bagging_workflow.predict(X)
+                                Rank[base_estimator] = cohen_kappa_score(y,predictions)
+                                # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
+                                meta_features['bootstrap'] = np.multiply(params['bootstrap'],1)
+                                meta_features['n_estimators'] = params['n_estimators']
+                                meta_features['pruning_method'] = pruning['pruning_method']
+                                meta_features['pruning_cp'] = pruning['pruning_cp']
+                                # Adicionar a lista de Workflows
+                                self.bagging_workflows.append(bagging_workflow)
+
+                            #print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
+                            i = 1
+                            for base_estimator in sorted(Rank, key=Rank.__getitem__ ,reverse=True):
+                                meta_features['Algorithm:' + base_estimator] = i
+                                Rank[base_estimator] = i
+                                i=i+1
+                                array_rank = []
+                            for value in Rank.values():
+                                array_rank.append(value)
+                            #print(array_rank)
+                            array_rank.append(params['n_estimators'])
+                            array_rank.append(np.multiply(params['bootstrap'],1))
+                            y_meta.append(array_rank)      # Este array contem o target
+                            x_meta.append(meta_features)   # Este array a adiconar contem as metafeatures do dataset e o scores do algoritmo base a testar
 
             # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
             self.meta_data = pd.DataFrame(x_meta)
             self.meta_data.to_csv('meta_data.csv') # Guardar Meta Data num ficheiro .CSV
             
-
+            print("Meta-Data Created & Saved!")
+            print("Loading Test Dataset")
             # Criar o target para o Meta Data
             y_meta = np.array(y_meta)
             # Get o test Dataset
             dataset = pd.read_csv('./datasets/test/weatherAUS.csv')
             dataset = dataset.drop('RISK_MM', axis=1)
             target_test = 'RainTomorrow'
+            print("Creating Meta-features")
             meta_features = self._metafeatures(dataset,target_test,meta_functions,post_processing_steps)
             X_test = pd.DataFrame(meta_features,index=[0])
-
+            print("Prepare data for Meta-Model")
             # Tratar dos dados para entrar no XGBOOST
             for f in self.meta_data.columns: 
                 if self.meta_data[f].dtype=='object': 
@@ -149,7 +172,7 @@ class autoBaggingClassifier:
             X_test=np.array(X_test) 
             self.meta_data = self.meta_data.astype(float) 
             X_test = X_test.astype(float)
-
+            print("Constructing Meta-Model:")
             # Criar o Meta Model XGBOOST
             meta_model = xgb.XGBRegressor(  objective="reg:squarederror",
                                             colsample_bytree = 0.3,
@@ -165,7 +188,7 @@ class autoBaggingClassifier:
             # Prever o melhor algoritmo
             preds = self.meta_model.predict(X_test)
             #print(preds)
-            print("Recommended Bagging workflow is: ")
+            print("Recommended Bagging workflow: ")
             print("Number of models: %1.0f" % preds[0][6])
             bootstrap = False
             if preds[0][7] > 0.5:
@@ -256,27 +279,125 @@ class autoBaggingClassifier:
         
         return meta_features
     
-    def _bb(self,target, # Target name ?
+
+    #
+    # Prunning: Boosting-based pruning of models
+    #
+    def _bb(self,target, # Target names
+                preds, # Predicts na training data
+                data, # training data
+                cutPoint): # ratio of the total n umber of models to cut off
+        
+        targets = data[target]
+        #print(preds.shape[0])
+        prunedN = m.ceil((preds.shape[0] - (preds.shape[0] * cutPoint)))
+        preds = pd.DataFrame(preds)
+        #print(preds)
+        #print(prunedN)
+        weights = []
+        for i in range(data.shape[0]):
+            weights.append(1/data.shape[0])
+        #print(weights)
+        
+        ordem = {}
+        for i in range(prunedN):
+            k = 1
+            errors = []
+            for x in range(len(weights)):
+                pred = np.asscalar(np.array(preds.iloc[x]))
+                print('target', target[x])
+                erro = sum(
+                        (
+                          (
+                            not
+                            (pred == target[x])
+                          )
+                            * 1
+                        )
+                            * weights)
+                print('erro =', erro)
+                errors.append(erro)
+            #for x , y in zip(np.transpose(preds), target):
+            #    errors.append(sum((not (x == targets.any())* 1) * weights))
+            #    erro = sum(((not (x == target[y])) * 1) * weights)
+            #    print('erro =', erro)
+            #    errors.append(erro)
+            
+            print('check 1 ')
+            k = k+1
+            for w in ordem.keys():
+                print('w', w)
+                errors[w] = max(errors) * 2
+            #print(errors)
+            print('check 2')
+            k = k+1
+            ordem[i] = np.argmin(errors)
+            print(ordem)
+            print('check 3')
+            k = k+1
+            errorU = min(errors)
+            print('check 4')
+            k = k+1
+            predU = []
+            for x in range(len(ordem)):
+                predU.append(preds[ordem[x]] == target[x])
+            print('predU = ',predU)
+            print('check 5')
+            k = k+1
+            if errorU > 0.5:
+                weights = []
+                for i in range(data.shape[0]):
+                    weights.append(1/data.shape[0])
+            else:
+                for w in range(len(weights)):
+                    if predU[w].bool:
+                        # Error % 0
+                        
+                        weights[w] = weights[w] / (2*errorU)
+                    else:
+                        # Error % 0
+                        weights[w] = weights[w] / (2*(1 - errorU))
+
+            for w in range(len(weights)):
+                if weights[w] > 10.000e+300:
+                    weights[w] = 10.000e+300
+                    
+        return ordem
+    
+    #
+    # Prunning: Margin Distance Minimization
+    #   
+    def _mdsq(self,target, # Target names
                 preds, # Predicts na training data
                 data, # training data
                 cutPoint): # ratio of the total n umber of models to cut off
         targets = data[target]
-        print(targets)
-        #
-        # TO-DO
-        #
         
+        prunedN = (preds.shape[1] - (preds.shape[1] * cutPoint))
+        pred = [] # 1 ou -1 se acertar ou não
+        ens = []
+        o = []
+        for i in range(data[targets].length):
+            ens.append(0)
+            o.append(0.075)
+
+        for x, tg in zip(preds,data[targets]):
+            if x == tg:
+                pred.append(1)
+            else:
+                pred.append(-1)
+
+        pred = pd.Dataframe(pred)
         
-    def _mdsq(self,target, # Target name ?
-                preds, # Predicts na training data
-                data, # training data
-                cutPoint): # ratio of the total n umber of models to cut off
-        targets = data[target]
-        print(targets)
-        #prunedN = min( data[target].shape[1] - (data[target].shape[1] * cutPoint))
-        #
-        # TO-DO
-        #    
+        ordem = []
+        for i in range(1,prunedN):
+            dist = []
+            for x, y, z in zip(pred, ens, o):
+                dist.append(m.sqrt(sum((((x + y) / i) - z)^2)))
+            ens = ens + pred[min(dist)]
+            pred = pd.Dataframe(pred[list(set(pred) - set(min(dist)))]) # Buscar o name em vez do valor, está mal.
+            ordem[i] = min(dist) # Como inteiro, pelo nome
+        return ordem   
     
     def _validateDataset(self,dataset,targetname):
         #if dataset[targetname].dtype != 'object':
