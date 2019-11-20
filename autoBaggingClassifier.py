@@ -41,7 +41,7 @@ class autoBaggingClassifier:
         self.grid = ParameterGrid({"n_estimators" : [50,100,200],
                            "bootstrap" : [True, False]
                          })
-        self.pruning = ParameterGrid({'pruning_method' :["bb", "mdsq"],
+        self.pruning = ParameterGrid({'pruning_method' :["none"],
                         'pruning_cp': [0.10,0.20,0.30,0.50]})
 
     def fit(self,
@@ -97,7 +97,7 @@ class autoBaggingClassifier:
                                 # Treinar o modelo
                                 bagging_workflow.fit(X,y)
                                 predictions = bagging_workflow.predict(X) # Main Prediction
-                                print("Start pruning " + pruning['pruning_method'])
+                                #print("Start pruning " + pruning['pruning_method'])
                                 if pruning['pruning_method'] == 'bb':
                                     bb_index= self._bb(y, predictions, X, pruning['pruning_cp'])
                                     print(bb_index)
@@ -267,6 +267,8 @@ class autoBaggingClassifier:
                                 'FeaturesLabels.MutualInformation.Kurtosis',
                                 'bootstrap',
                                 'n_estimators',
+                                'pruning_method',
+                                'pruning_cp',
                                 'Algorithm:Decision Tree (max_depth=4)',
                                 'Algorithm:Decision Tree (max_depth=3)',
                                 'Algorithm:Naive Bayes',
@@ -276,7 +278,6 @@ class autoBaggingClassifier:
         for feature_name in meta_features_allnames:
             if not (feature_name) in meta_features:
                 meta_features[feature_name] = np.nan
-        
         return meta_features
     
 
@@ -288,7 +289,7 @@ class autoBaggingClassifier:
                 data, # training data
                 cutPoint): # ratio of the total n umber of models to cut off
         
-        targets = data[target]
+        #targets = data[target]
         #print(preds.shape[0])
         prunedN = m.ceil((preds.shape[0] - (preds.shape[0] * cutPoint)))
         preds = pd.DataFrame(preds)

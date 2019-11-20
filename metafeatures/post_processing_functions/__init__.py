@@ -1,6 +1,6 @@
 import os
 
-from metafeatures.aux.discovery import discover_components
+from metafeatures._aux.discovery import discover_components
 from metafeatures.post_processing_functions.base import PostProcessing
 
 
