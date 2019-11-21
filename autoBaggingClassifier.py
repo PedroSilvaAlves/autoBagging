@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 import math as m
+import joblib
+
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
 from sklearn.naive_bayes import GaussianNB
@@ -49,10 +51,9 @@ class autoBaggingClassifier(BaseEstimator):
             target_names):           # Nome dos targets de todas os datasets
             
         # Por cada file abrir o csv e tirar para um array de DataFrames
-        self.datasets = []          # Vai conter todos os Datasets
-        self.bagging_workflows = []  # Vai conter todos os Bagging workflows
-        x_meta = []      # Vai conter todas as Metafeatures, uma linha um exemplo de um algoritmo com um certo tipo de parametros
-        y_meta = []
+        x_meta = []     # Vai conter todas as Meta-features, uma linha um exemplo de um algoritmo com um certo tipo de parametros
+        y_meta = []     # Vai conter o Meta-Target, em cada linha têm a avaliação de 1-n de cada algoritmo
+                        # + parametros do bagging workflow
         
         for file_name, target in zip(file_name_datasets, target_names):
             print("Creating Meta-features for: ", file_name)
@@ -63,16 +64,19 @@ class autoBaggingClassifier(BaseEstimator):
                     "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
                 quit()
 
-            self.datasets.append(dataset)
             if self._validateDataset(dataset, target):
                 # MetaFeatures
                 meta_features_estematic = self._metafeatures(
                     dataset, target, self.meta_functions, self.post_processing_steps)
-
+                # Label Encoder para melhores resultados
+                for f in dataset.columns:
+                    if dataset[f].dtype == 'object':
+                        lbl = LabelEncoder()
+                        lbl.fit(list(dataset[f].values))
+                        dataset[f] = lbl.transform(list(dataset[f].values))
                 # É necessário dividir o dataset em exemplos e os targets
                 X = SimpleImputer().fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
-                #scoring = 'accuracy'
                 # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     meta_features = meta_features_estematic.copy()
@@ -95,12 +99,11 @@ class autoBaggingClassifier(BaseEstimator):
                         meta_features['max_samples'] = params['max_samples']
                         meta_features['max_features'] = params['max_features']
                         # Adicionar a lista de Workflows
-                        self.bagging_workflows.append(bagging_workflow)
 
                     #print(sorted(Rank, key=Rank.__getitem__ ,reverse=True))
                     i = 1
                     for base_estimator in sorted(Rank, key=Rank.__getitem__, reverse=True):
-                        meta_features['Algorithm:' + base_estimator] = i
+                        meta_features['Algorithm: ' + base_estimator] = i
                         Rank[base_estimator] = i
                         i = i+1
                         array_rank = []
@@ -120,7 +123,7 @@ class autoBaggingClassifier(BaseEstimator):
         self.meta_data = pd.DataFrame(x_meta)
         self.meta_target = np.array(y_meta)
         # Guardar Meta Data num ficheiro .CSV
-        self.meta_data.to_csv('meta_data.csv')
+        self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
@@ -181,17 +184,19 @@ class autoBaggingClassifier(BaseEstimator):
                     max_features = 2
                 else:
                     max_features = 4
+                    algorithm_index = 0
             algorithm_score = preds[0][0]
-            for i in range(0, 5):
+            for i in range(0, 6):
                 if preds[0][i] < algorithm_score:
                     algorithm_score = preds[0][i]
                     algorithm_index = i
             switcher = {
-                0: "Decision Tree (max_depth=4)",
-                1: "Decision Tree (max_depth=3)",
-                2: "Naive Bayes",
-                3: "Decision Tree (max_depth=2)",
-                4: "Decision Tree (max_depth=1)",
+               -1: "Error",
+                0: "Decision Tree (max_depth=1)",
+                1: "Decision Tree (max_depth=2)",
+                2: "Decision Tree (max_depth=3)",
+                3: "Decision Tree (max_depth=4)",
+                4: "Naive Bayes",
                 5: "Majority Class"}
 
             print("Recommended Bagging workflow: ")
@@ -266,12 +271,12 @@ class autoBaggingClassifier(BaseEstimator):
                                   'n_estimators',
                                   'max_samples',
                                   'max_features',
-                                  'Algorithm:Decision Tree (max_depth=4)',
-                                  'Algorithm:Decision Tree (max_depth=3)',
-                                  'Algorithm:Naive Bayes',
-                                  'Algorithm:Decision Tree (max_depth=2)',
-                                  'Algorithm:Decision Tree (max_depth=1)',
-                                  'Algorithm:Majority Class']
+                                  'Algorithm: Decision Tree (max_depth=1)',
+                                  'Algorithm: Decision Tree (max_depth=2)',
+                                  'Algorithm: Decision Tree (max_depth=3)',
+                                  'Algorithm: Decision Tree (max_depth=4)',
+                                  'Algorithm: Naive Bayes',
+                                  'Algorithm: Majority Class']
         for feature_name in meta_features_allnames:
             if not (feature_name) in meta_features:
                 meta_features[feature_name] = np.nan
@@ -282,7 +287,6 @@ class autoBaggingClassifier(BaseEstimator):
             if sorted(dataset[targetname].unique()) != [0, 1]:
                 print("Não é válido o Dataset")
                 return False
-        #print("True, é valido")
         return True
 
 
@@ -292,9 +296,9 @@ TargetNames = []
 FileNameDataset = []
 
 
-FileNameDataset.append('./datasets/titanic.csv')
+FileNameDataset.append('./datasets_classifier/titanic.csv')
 TargetNames.append('Survived')
-FileNameDataset.append('./datasets/heart.csv')
+FileNameDataset.append('./datasets_classifier/heart.csv')
 TargetNames.append('target')
 
 post_processing_steps = [Mean(),
@@ -316,14 +320,15 @@ meta_functions = [Entropy(),
 #######################################################
 ################ AutoBagging Classifier################
 #######################################################
+print("*****************AutoBagging Classifier*****************")
 model = autoBaggingClassifier(meta_functions,post_processing_steps)
 model = model.fit(FileNameDataset, TargetNames)
-
+joblib.dump(model, "./models/autoBaggingClassifierModel.sav")
 
 #######################################################
 ################## Loading Dataset ####################
 #######################################################
-dataset = pd.read_csv('./datasets/test/weatherAUS.csv')
+dataset = pd.read_csv('./datasets_classifier/test/weatherAUS.csv')
 dataset = dataset.drop('RISK_MM', axis=1)
 targetname = 'RainTomorrow'
 bestBagging = model.predict(dataset,targetname)
@@ -333,16 +338,13 @@ print("Verify Bagging algorithm score:")
 dataset.fillna((-999), inplace=True)
 
 for f in dataset.columns:
-                if dataset[f].dtype == 'object':
-                    lbl = LabelEncoder()
-                    lbl.fit(list(dataset[f].values))
-                    dataset[f] = lbl.transform(list(dataset[f].values))
-dataset = np.array(dataset)
-X = dataset[:,0:21]
-y = dataset[:,22]
+    if dataset[f].dtype == 'object':
+        lbl = LabelEncoder()
+        lbl.fit(list(dataset[f].values))
+        dataset[f] = lbl.transform(list(dataset[f].values))
+X = SimpleImputer().fit_transform(dataset.drop(targetname, axis=1))
+y = dataset[targetname]
 
-X = np.array(X)
-X = X.astype(float)
 
 #######################################################
 ################## Testing Bagging ####################
