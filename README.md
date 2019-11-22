@@ -9,5 +9,7 @@ autoBaggingRegression: Cria um modelo ensemble Bagging recomendado a um certo ti
 
 ### Example:
 autoBagging = autoBaggingRegressor(meta_functions,post_processing_steps)
+
 autoBagging.fit(FileNameDatasets, TargetNames)
+
 RecommendedBagging = autoBagging.predict(Dataset,TargetName)
