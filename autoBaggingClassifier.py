@@ -4,11 +4,13 @@ import xgboost as xgb
 import math as m
 import joblib
 import warnings
+from mlxtend.classifier import EnsembleVoteClassifier
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import VotingClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.model_selection import ParameterGrid
@@ -38,12 +40,13 @@ class autoBaggingClassifier(BaseEstimator):
                                 'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4, random_state=0),
                                 'Naive Bayes': GaussianNB(),
                                 'Majority Class': DummyClassifier(random_state=0)}
-        self.grid = ParameterGrid({"n_estimators": [50, 100, 200],
-                                   "bootstrap": [True, False],
-                                   "bootstrap_features" : [True, False],
+        self.grid = ParameterGrid({"n_estimators": [50, 100],
+                                   "bootstrap": [True ],
+                                   "bootstrap_features" : [True ],
                                    "max_samples": [0.5, 1.0],
                                    "max_features": [1, 2, 4]})
-
+        self.pruning = ParameterGrid({'pruning_method' :["bb"],
+                                      'pruning_cp': [0.25,0.75]})
     def fit(self,
             file_name_datasets,     # Nome de todos os ficheiros .CSV
             target_names):           # Nome dos targets de todas os datasets
@@ -76,46 +79,81 @@ class autoBaggingClassifier(BaseEstimator):
                 X = SimpleImputer().fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
                 # Criar base-models
-                for params in self.grid:  # Combinações de Parametros
-                    meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
-                    Rank = {}
-                    for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
-                        # Criar modelo
-                        bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
-                                                                random_state=0,
-                                                                **params)
-                        # Treinar o modelo
-                        bagging_workflow.fit(X, y)
-                        # Criar landmark do baggingworkflow atual
-                        predictions = bagging_workflow.predict(X)
-                        Rank[base_estimator] = cohen_kappa_score(
-                            y, predictions)
-                        # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
-                        meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
-                        meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
-                        meta_features['n_estimators'] = params['n_estimators']
-                        meta_features['max_samples'] = params['max_samples']
-                        meta_features['max_features'] = params['max_features']
-                    # Fim combinação dos algoritmos base, ainda dentro da Combinação de Parametros
-                    i = 1
-                    for base_estimator in sorted(Rank, key=Rank.__getitem__, reverse=True):
-                        # Ordena os algoritmos atravez do landmark e atribui um rank (1 é o melhor)
-                        meta_features['Algorithm: ' + base_estimator] = i
-                        Rank[base_estimator] = i
-                        i = i+1
-                    array_rank = [] # Este array vai contem o target deste algoritmo
-                    for value in Rank.values():
-                        array_rank.append(value)  # Adicina os ranks dos algoritmos
-                    # Adiciona os vários parametros
-                    array_rank.append(params['n_estimators'])
-                    array_rank.append(np.multiply(params['bootstrap'], 1))
-                    array_rank.append(np.multiply(params['bootstrap_features'], 1))
-                    array_rank.append(params['max_samples'])
-                    array_rank.append(params['max_features'])
+                for pruning in self.pruning:
+                    for params in self.grid:  # Combinações de Parametros
+                        meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
+                        Rank = {}
+                        for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
+                            # Criar modelo
+                            bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
+                                                                    random_state=0,
+                                                                    **params)
+                            # Treinar o modelo
+                            bagging_workflow.fit(X, y)
+                            predictions = bagging_workflow.predict(X)
+                            print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+                            print("Cohen Kappa full Bagging: ", cohen_kappa_score(y, predictions))
+                            # Criar landmark do baggingworkflow atual
+                            print("Start pruning " + pruning['pruning_method'])
+                            
+                            predictions = []
+                            #print(bagging_workflow.estimators_features_)
+                            
+                            if pruning['pruning_method'] == 'bb':
+                                for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                                    predictions.append(estimator.predict(X[:, features]))
+                                bb_index= self._bb(y, predictions, X, pruning['pruning_cp'])
+                                print("BB_INDEX = ", bb_index)
+                                # Create VotingClassifier com a lista de bb_index
+                                estimators = []
+                                for i in bb_index.values():
+                                    estimators.append(bagging_workflow.estimators_[i])
+                                bagging_workflow.estimators_ = estimators
+                            else:
+                                if pruning['pruning_method'] == 'mdsq':
+                                    for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                                        predictions.append(estimator.predict(X[:, features]))
+                                    mdsq_index = self._mdsq(y, predictions, X, pruning['pruning_cp'])
+                                    print(mdsq_index)
+                                    # Create Voting Classifier com a lista de mdsq_index
+                                    
+                                    #estimators = []
+                                    #for i in mdsq_index.values():
+                                    #    estimators.append(bagging_workflow.estimators_[i])
+                                    #bagging_workflow.estimators_ = estimators
 
-                    y_meta.append(array_rank)
-                    # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
-                    x_meta.append(meta_features)
+                            predictions = bagging_workflow.predict(X)
+                            Rank[base_estimator] = cohen_kappa_score(y, predictions)
+                           # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
+                            meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
+                            meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
+                            meta_features['n_estimators'] = params['n_estimators']
+                            meta_features['max_samples'] = params['max_samples']
+                            meta_features['max_features'] = params['max_features']
+                            meta_features['pruning_method'] = pruning['pruning_method']
+                            meta_features['pruning_cp'] = pruning['pruning_cp']
+                        # Fim combinação dos algoritmos base, ainda dentro da Combinação de Parametros
+                        i = 1
+                        for base_estimator in sorted(Rank, key=Rank.__getitem__, reverse=True):
+                            # Ordena os algoritmos atravez do landmark e atribui um rank (1 é o melhor)
+                            meta_features['Algorithm: ' + base_estimator] = i
+                            Rank[base_estimator] = i
+                            i = i+1
+                        array_rank = [] # Este array vai contem o target deste algoritmo
+                        for value in Rank.values():
+                            array_rank.append(value)  # Adicina os ranks dos algoritmos
+                        # Adiciona os vários parametros
+                        array_rank.append(params['n_estimators'])
+                        array_rank.append(np.multiply(params['bootstrap'], 1))
+                        array_rank.append(np.multiply(params['bootstrap_features'], 1))
+                        array_rank.append(params['max_samples'])
+                        array_rank.append(params['max_features'])
+                        array_rank.append(pruning['pruning_method'])
+                        array_rank.append(pruning['pruning_cp'])
+
+                        y_meta.append(array_rank)
+                        # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
+                        x_meta.append(meta_features)
 
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
@@ -300,3 +338,88 @@ class autoBaggingClassifier(BaseEstimator):
                 print("Não é válido o Dataset")
                 return False
         return True
+
+    # Prunning: Boosting-based pruning of models
+    def _bb(self,target, # Target names
+                preds, # vetor de predicts de cada estimator no training data
+                data, # training data
+                cutPoint): # ratio of the total n umber of models to cut off
+
+        
+        prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
+        print("NumModelos = ", len(preds),"\nPrunedN = ", prunedN)
+        weights = []
+        for i in range(data.shape[0]):
+            weights.append(1/data.shape[0])
+
+        ordem = {}
+        for i in range(prunedN):
+            errors = []
+            for w in range(len(preds)):
+                erro = 0
+                for x in range(len(weights)):
+                    erro = erro + ((not((preds[w][x] == target[x]))* -1) * weights[x])
+                errors.append(erro)
+            valor  = max(errors) *2
+            for w in ordem.values():
+                errors[w] = valor
+            ordem[i] = np.argmin(errors)
+            
+
+            errorU = min(errors)
+            predU = []
+            for x in range(len(weights)):
+                predU.append(preds[ordem[i]][x] == target[x])
+
+            if errorU > 0.5:
+                weights = []
+                for i in range(data.shape[0]):
+                    weights.append(1/data.shape[0])
+            else:
+                for w in range(len(weights)):
+                    if predU[w] == True:
+                        try:
+                            weights[w] = weights[w] / (2*errorU)
+                            break
+                        except ZeroDivisionError:
+                            weights[w] = 10.000e+300
+                    else:
+                        try:
+                            weights[w] = weights[w] / (2*(1 - errorU))
+                            break
+                        except ZeroDivisionError:
+                            weights[w] = 10.000e+300
+        return ordem
+
+    # Prunning: Margin Distance Minimization   
+    def _mdsq(self,target, # Target names
+                preds, # Predicts na training data
+                data, # training data
+                cutPoint): # ratio of the total n umber of models to cut off
+        targets = data[target]
+
+        prunedN = (preds.shape[1] - (preds.shape[1] * cutPoint))
+        pred = [] # 1 ou -1 se acertar ou não
+        ens = []
+        o = []
+        for i in range(data[targets].length):
+            ens.append(0)
+            o.append(0.075)
+
+        for x, tg in zip(preds,data[targets]):
+            if x == tg:
+                pred.append(1)
+            else:
+                pred.append(-1)
+
+        pred = pd.Dataframe(pred)
+
+        ordem = []
+        for i in range(1,prunedN):
+            dist = []
+            for x, y, z in zip(pred, ens, o):
+                dist.append(m.sqrt(sum((((x + y) / i) - z)^2)))
+            ens = ens + pred[min(dist)]
+            pred = pd.Dataframe(pred[list(set(pred) - set(min(dist)))]) # Buscar o name em vez do valor, está mal.
+            ordem[i] = min(dist) # Como inteiro, pelo nome
+        return ordem   
