@@ -46,35 +46,33 @@ class autoBaggingRegressor(BaseEstimator):
                                    "max_features": [1, 2, 4]})
     
     def fit(self,
-            file_name_datasets,     # Nome de todos os ficheiros .CSV
+            datasets,                # Lista com datasets
             target_names):           # Nome dos targets de todas os datasets
             
         # Por cada file abrir o csv e tirar para um array de DataFrames
         x_meta = []     # Vai conter todas as Meta-features, uma linha um exemplo de um algoritmo com um certo tipo de parametros
         y_meta = []     # Vai conter o Meta-Target, em cada linha têm a avaliação de 1-n de cada algoritmo
                         # + parametros do bagging workflow
-        for file_name, target in zip(file_name_datasets, target_names):  # Percorre todos os datasets para treino do meta-model
-            print("Creating Meta-features for: ", file_name)
-            try:
-                dataset = pd.read_csv(file_name)
-            except FileNotFoundError:
-                print(
-                    "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
-                quit()
-
-            if self._validateDataset(dataset, target):
+        ndataset = 0
+        for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para treino do meta-model
+           if self._validateDataset(dataset, target):
+                ndataset= ndataset+1
+                print("Dataset nº ",ndataset)
+                # Drop Categorial features sklearn não aceita
+                for f in dataset.columns:
+                    if dataset[f].dtype == 'object':
+                        dataset.drop(labels=f, axis=1)
                 # MetaFeatures
                 meta_features_estematic = self._metafeatures(
                     dataset, target, self.meta_functions, self.post_processing_steps)
-                # Label Encoder para melhores resultados
-                for f in dataset.columns:
-                    if dataset[f].dtype == 'object':
-                        lbl = LabelEncoder()
-                        lbl.fit(list(dataset[f].values))
-                        dataset[f] = lbl.transform(list(dataset[f].values))
+                
                 # Dividir o dataset em exemplos e os targets
                 X = SimpleImputer().fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
+                # Split the data into training and DSEL for DS techniques
+                X, X_dsel, y, y_dsel = train_test_split(X, y,
+                                                    test_size=0.5,
+                                                    random_state=0)
                 # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez

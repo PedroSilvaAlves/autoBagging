@@ -33,13 +33,18 @@ from metafeatures.core.engine import metafeature_generator
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 TargetNames = []
-FileNameDataset = []
+Datasets = []
+try:
+    Datasets.append(pd.read_csv('./datasets_classifier/titanic.csv'))
+    TargetNames.append('Survived')
+    Datasets.append(pd.read_csv('./datasets_classifier/heart.csv'))
+    TargetNames.append('target')
+except FileNotFoundError:
+    print(
+        "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
+    quit()
 
 
-FileNameDataset.append('./datasets_classifier/titanic.csv')
-TargetNames.append('Survived')
-FileNameDataset.append('./datasets_classifier/heart.csv')
-TargetNames.append('target')
 
 post_processing_steps = [Mean(),
                          StandardDeviation(),
@@ -63,7 +68,7 @@ meta_functions = [Entropy(),
 print("\n\n\n***************** AutoBagging Classifier *****************")
 model = autoBaggingClassifier(meta_functions=meta_functions,
                               post_processing_steps=post_processing_steps)
-model = model.fit(FileNameDataset, TargetNames)
+model = model.fit(Datasets, TargetNames)
 joblib.dump(model, "./models/autoBaggingClassifierModel.sav")
 
 
@@ -73,13 +78,11 @@ joblib.dump(model, "./models/autoBaggingClassifierModel.sav")
 dataset = pd.read_csv('./datasets_classifier/test/weatherAUS.csv')
 dataset = dataset.drop('RISK_MM', axis=1)
 targetname = 'RainTomorrow'
-
+dataset[targetname] = dataset[targetname].map({'No': 0, 'Yes' : 1}).astype(int)
 dataset.fillna((-999), inplace=True)
 for f in dataset.columns:
     if dataset[f].dtype == 'object':
-        lbl = LabelEncoder()
-        lbl.fit(list(dataset[f].values))
-        dataset[f] = lbl.transform(list(dataset[f].values))
+        dataset = dataset.drop(columns=f, axis=1)
 X = SimpleImputer().fit_transform(dataset.drop(targetname, axis=1))
 y = dataset[targetname]
 
