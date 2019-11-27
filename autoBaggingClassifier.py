@@ -4,7 +4,7 @@ import xgboost as xgb
 import math as m
 import joblib
 import warnings
-from mlxtend.classifier import EnsembleVoteClassifier
+from sklearn.utils.multiclass import type_of_target
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import StandardScaler
@@ -13,7 +13,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import BaggingClassifier
 from sklearn.ensemble import VotingClassifier
 from sklearn.dummy import DummyClassifier
-from sklearn.multioutput import MultiOutputRegressor
+from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import ParameterGrid
 from sklearn.model_selection import KFold
 from sklearn.model_selection import cross_val_score
@@ -44,13 +44,13 @@ class autoBaggingClassifier(BaseEstimator):
                                 'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4, random_state=0),
                                 'Naive Bayes': GaussianNB(),
                                 'Majority Class': DummyClassifier(random_state=0)}
-        self.grid = ParameterGrid({"n_estimators" : [50, 100, 200],
+        self.grid = ParameterGrid({"n_estimators" : [50, 100],
                                    "bootstrap" : [True],
-                                   "bootstrap_features" : [False],
+                                   "bootstrap_features" : [True,False],
                                    "max_samples" : [1.0],
                                    "max_features": [1.0]})
         self.pruning = ParameterGrid({'pruning_method' : [0],
-                                      'pruning_cp': [0.1]})
+                                      'pruning_cp': [0.10,]})
         self.DStechique = ParameterGrid({ 'ds' : [0,1]})
 
     def fit(self,
@@ -65,7 +65,7 @@ class autoBaggingClassifier(BaseEstimator):
         for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para criar Meta Data
             if self._validateDataset(dataset, target):
                 ndataset= ndataset+1
-                print("Dataset nº ",ndataset)
+                print("Dataset nº ", ndataset)
                 # Tratar do Dataset
                 # Drop Categorial features sklearn não aceita
                 for f in dataset.columns:
@@ -79,12 +79,12 @@ class autoBaggingClassifier(BaseEstimator):
                 # Dividir o dataset em exemplos e os targets
                 X = SimpleImputer().fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
-                X, X_test, y, y_test = train_test_split(X, y, test_size=0.33,
-                                                    random_state=0)
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33,
+                                                    random_state=0,shuffle=False)
                 # Split the data into training and DSEL for DS techniques
-                X, X_dsel, y, y_dsel = train_test_split(X, y,
+                X_train, X_dsel, y_train, y_dsel = train_test_split(X_train, y_train,
                                                     test_size=0.5,
-                                                    random_state=0)
+                                                    random_state=0,shuffle=False)
                 # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     for DS in self.DStechique:
@@ -97,16 +97,17 @@ class autoBaggingClassifier(BaseEstimator):
                                                                         random_state=0,
                                                                         **params)
                                 # Treinar o modelo
-                                bagging_workflow.fit(X, y)
-                                predictions = bagging_workflow.predict(X_test)
+                                bagging_workflow.fit(X_train, y_train)
+                                predictions = bagging_workflow.predict(X_train)
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
-                                
                                 if pruning['pruning_method'] == 1:
+                                    print("Waiting for BB")
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
-                                        predictions.append(estimator.predict(X[:, features]))
-                                    bb_index= self._bb(y, predictions, X, pruning['pruning_cp'])
-                                    print("BB_index = ", bb_index)
+                                        predictions.append(estimator.predict(X_train[:, features]))
+                                    bb_index= self._bb(y_train, predictions, X_train, pruning['pruning_cp'])
+                                    #print("BB_INDEX = ", bb_index)
+                                    # Create VotingClassifier com a lista de bb_index
                                     estimators = []
                                     for i in bb_index.values():
                                         estimators.append(bagging_workflow.estimators_[i])
@@ -150,16 +151,16 @@ class autoBaggingClassifier(BaseEstimator):
                                 i = i+1
                             array_rank = [] # Este array vai contem o target deste algoritmo
                             for value in Rank.values():
-                                array_rank.append(value)  # Adicina os ranks dos algoritmos
+                                array_rank.append(int(value))  # Adicina os ranks dos algoritmos
                             # Adiciona os vários parametros
-                            array_rank.append(params['n_estimators'])
-                            array_rank.append(np.multiply(params['bootstrap'], 1))
-                            array_rank.append(np.multiply(params['bootstrap_features'], 1))
-                            array_rank.append(params['max_samples'])
-                            array_rank.append(params['max_features'])
-                            array_rank.append(pruning['pruning_method'])
-                            array_rank.append(pruning['pruning_cp'])
-                            array_rank.append(DS['ds'])
+                            array_rank.append(int(params['n_estimators']))
+                            array_rank.append(int(np.multiply(params['bootstrap'], 1)))
+                            array_rank.append(int(np.multiply(params['bootstrap_features'], 1)))
+                            array_rank.append(int(params['max_samples']))
+                            array_rank.append(int(params['max_features']))
+                            array_rank.append(int(pruning['pruning_method']))
+                            array_rank.append(int(pruning['pruning_cp']*100))
+                            array_rank.append(int(DS['ds']))
 
                             y_meta.append(array_rank)
                             # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
@@ -185,77 +186,59 @@ class autoBaggingClassifier(BaseEstimator):
 
         print("Constructing Meta-Model:")
         # Criar o Meta Model XGBOOST
-        meta_model = xgb.XGBRegressor(objective="reg:squarederror",
+        meta_model = xgb.XGBClassifier(objective="reg:squarederror",
                                         colsample_bytree=0.3,
                                         learning_rate=0.1,
                                         max_depth=5,
                                         alpha=10,
                                         n_estimators=100)
-        self.meta_model = MultiOutputRegressor(meta_model)
+        self.meta_model = MultiOutputClassifier(meta_model)
 
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
         return self
 
-    def predict(self, dataset, targetname):
-        if self._validateDataset(dataset, targetname):
-
+    def predict(self, dataset, target):
+        if self._validateDataset(dataset, target):
+            for f in dataset.columns:
+                if dataset[f].dtype == 'object':
+                    dataset = dataset.drop(columns=f, axis=1)
             meta_features = self._metafeatures(
-                dataset, targetname, self.meta_functions, self.post_processing_steps)
+                dataset, target, self.meta_functions, self.post_processing_steps)
             
             # Trata dataset para a predict
-            X_test = pd.DataFrame(meta_features, index=[0])
-            # for f in X_test.columns:
-            #     if X_test[f].dtype == 'object':
-            #         lbl = LabelEncoder()
-            #         lbl.fit(list(X_test[f].values))
-            #         X_test[f] = lbl.transform(list(X_test[f].values))
-            X_test.fillna((-999), inplace=True)
-            # X_test=np.array(X_test)
-            X_test = X_test.astype(float)
+            X_meta = pd.DataFrame(meta_features, index=[0])
+            X_meta.fillna((-999), inplace=True)
+            X_meta = X_meta.astype(float)
 
             # Predict the best algorithm
-            preds = self.meta_model.predict(X_test)
+            preds = self.meta_model.predict(X_meta)
 
             # Prints e construção do Bagging previsto
-            # Trocar para classificação?
             n_estimators = int(preds[0][6])
-            if preds[0][7] > 0.5:
-                bootstrap = True
-            else:
-                bootstrap = False
-            if preds[0][8] > 0.5:
-                bootstrap_features = True
-            else:
-                bootstrap_features = False
-            if preds[0][9] > 0.75:
-                max_samples = 1.0
-            else:
-                max_samples = 0.5
-            if preds[0][10] < 1.5:
-                max_features = 1.0
-            else:
-                if preds[0][10] < 3:
-                    max_features = 2.0
-                else:
-                    max_features = 4.0
-            if preds[0][11] > 0.5:
-                pruning_method = 'BB'
-            else:
-                if preds[0][11] < -0.5:
-                    pruning_method = 'MDSQ'
-                else:
-                    pruning_method = 'None'
+            bootstrap = bool(preds[0][7])
+            bootstrap_features = bool(preds[0][8])
+            max_samples = float(preds[0][9])
+            max_features = float(preds[0][10])
+            pruning_method = int(preds[0][11])
             pruning_cp = int(preds[0][12])
+            ds = int(preds[0][13])
 
+            # String para visualização
+            if preds[0][11] == 1:
+                pruning_method_str = 'BB'
+            else:
+                if preds[0][11] == -1:
+                    pruning_method_str = 'MDSQ'
+                else:
+                    pruning_method_str = 'None'
             if preds[0][13] > 0.5:
-                ds = 'KNORAE'
+                ds_str = 'KNORAE'
             else:
                 if preds[0][13] < -0.5:
-                    ds = 'OLA'
+                    ds_str = 'OLA'
                 else:
-                    ds = 'None'
-
+                    ds_str = 'None'
             algorithm_index = 0
             algorithm_score = preds[0][0]
             for i in range(0, 6):
@@ -277,13 +260,13 @@ class autoBaggingClassifier(BaseEstimator):
             print("\tBootstrap_features: ",bootstrap_features)
             print("\tMax_samples: ", max_samples)
             print("\tMax_features: ", max_features)
-            print("\tPruning Method: ", pruning_method)
+            print("\tPruning Method: ", pruning_method_str)
             print("\tPruning CutPoint: ", pruning_cp)
-            print("\tDynamic Selection: ", ds)
+            print("\tDynamic Selection: ", ds_str)
             print("\tAlgorithm: ", switcher.get(algorithm_index))
 
             # BaggingWorkflow
-            return BaggingClassifier(
+            bagging_workflow = BaggingClassifier(
                     base_estimator= self.base_estimators[switcher.get(algorithm_index)],
                     n_estimators=n_estimators,
                     bootstrap=bootstrap,
@@ -292,6 +275,48 @@ class autoBaggingClassifier(BaseEstimator):
                     max_features=max_features,
                     random_state=0,
                     )
+
+            
+            # Dividir o dataset em exemplos e os targets
+            X = SimpleImputer().fit_transform(dataset.drop(target, axis=1))
+            y = dataset[target]
+
+            # Treinar o modelo
+            bagging_workflow.fit(X, y)
+            predictions = bagging_workflow.predict(X)
+            # Criar landmark do baggingworkflow atual
+            predictions = []
+            if pruning_method == 1:
+                print("Waiting for BB")
+                for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                    predictions.append(estimator.predict(X[:, features]))
+                bb_index= self._bb(y, predictions, X, pruning_cp)
+                #print("BB_INDEX = ", bb_index)
+                # Create VotingClassifier com a lista de bb_index
+                estimators = []
+                for i in bb_index.values():
+                    estimators.append(bagging_workflow.estimators_[i])
+                bagging_workflow.estimators_ = estimators
+            else:
+                if pruning_method == -1:
+                    print("MDSQ")
+            
+            if ds == -1:
+                #print("KNORAE BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                bagging_workflow = KNORAE(bagging_workflow)
+                bagging_workflow.fit(X,y)
+                #print("KNORAE AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                #print("----------------------------")
+
+            if ds == 1:
+                #print("OLA BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                bagging_workflow = OLA(bagging_workflow)
+                bagging_workflow.fit(X,y)
+                #print("OLA AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                #print("----------------------------")
+                
+            predictions = bagging_workflow.predict(X)
+            return bagging_workflow
         else:
             print("Erro, error não é um problema de Classifier")
 
@@ -366,10 +391,10 @@ class autoBaggingClassifier(BaseEstimator):
                 meta_features[feature_name] = np.nan
         return meta_features
 
-    def _validateDataset(self, dataset, targetname):
+    def _validateDataset(self, dataset, target):
         # Classificação Binária
-        if dataset[targetname].dtype != 'object':
-            if sorted(dataset[targetname].unique()) != [0, 1]:
+        if dataset[target].dtype != 'object':
+            if sorted(dataset[target].unique()) != [0, 1]:
                 print("Não é válido o Dataset")
                 return False
         return True
@@ -380,7 +405,7 @@ class autoBaggingClassifier(BaseEstimator):
                 data, # training data
                 cutPoint): # ratio of the total n umber of models to cut off
         prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
-        print("NumModelos = ", len(preds),"\nPrunedN = ", prunedN)
+        #print("Numero Modelos before Pruning = ", len(preds),"\nNumero Modelos after Pruning = ", prunedN)
         weights = []
         for i in range(data.shape[0]):
             weights.append(1/data.shape[0])
