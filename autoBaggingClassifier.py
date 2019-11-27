@@ -40,13 +40,13 @@ class autoBaggingClassifier(BaseEstimator):
                                 'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4, random_state=0),
                                 'Naive Bayes': GaussianNB(),
                                 'Majority Class': DummyClassifier(random_state=0)}
-        self.grid = ParameterGrid({"n_estimators": [50, 100],
-                                   "bootstrap": [True ],
-                                   "bootstrap_features" : [True ],
-                                   "max_samples": [0.5, 1.0],
-                                   "max_features": [1, 2, 4]})
-        self.pruning = ParameterGrid({'pruning_method' :["bb"],
-                                      'pruning_cp': [0.25,0.75]})
+        self.grid = ParameterGrid({"n_estimators" : [50, 100, 200],
+                                   "bootstrap" : [True, False],
+                                   "bootstrap_features" : [True, False],
+                                   "max_samples" : [0.5, 1.0],
+                                   "max_features": [1, 2]})
+        self.pruning = ParameterGrid({'pruning_method' : [0, 1],
+                                      'pruning_cp': [0.5, 0.75]})
     def fit(self,
             file_name_datasets,     # Nome de todos os ficheiros .CSV
             target_names):           # Nome dos targets de todas os datasets
@@ -91,15 +91,10 @@ class autoBaggingClassifier(BaseEstimator):
                             # Treinar o modelo
                             bagging_workflow.fit(X, y)
                             predictions = bagging_workflow.predict(X)
-                            print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-                            print("Cohen Kappa full Bagging: ", cohen_kappa_score(y, predictions))
                             # Criar landmark do baggingworkflow atual
-                            print("Start pruning " + pruning['pruning_method'])
-                            
                             predictions = []
-                            #print(bagging_workflow.estimators_features_)
                             
-                            if pruning['pruning_method'] == 'bb':
+                            if pruning['pruning_method'] == 1:
                                 for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                     predictions.append(estimator.predict(X[:, features]))
                                 bb_index= self._bb(y, predictions, X, pruning['pruning_cp'])
@@ -110,11 +105,12 @@ class autoBaggingClassifier(BaseEstimator):
                                     estimators.append(bagging_workflow.estimators_[i])
                                 bagging_workflow.estimators_ = estimators
                             else:
-                                if pruning['pruning_method'] == 'mdsq':
-                                    for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
-                                        predictions.append(estimator.predict(X[:, features]))
-                                    mdsq_index = self._mdsq(y, predictions, X, pruning['pruning_cp'])
-                                    print(mdsq_index)
+                                if pruning['pruning_method'] == -1:
+                                    print("MDSQ")
+                                    #for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                                    #    predictions.append(estimator.predict(X[:, features]))
+                                    #mdsq_index = self._mdsq(y, predictions, X, pruning['pruning_cp'])
+                                    #print(mdsq_index)
                                     # Create Voting Classifier com a lista de mdsq_index
                                     
                                     #estimators = []
@@ -124,7 +120,7 @@ class autoBaggingClassifier(BaseEstimator):
 
                             predictions = bagging_workflow.predict(X)
                             Rank[base_estimator] = cohen_kappa_score(y, predictions)
-                           # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
+                            # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                             meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
                             meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
                             meta_features['n_estimators'] = params['n_estimators']
@@ -229,6 +225,14 @@ class autoBaggingClassifier(BaseEstimator):
                     max_features = 2
                 else:
                     max_features = 4
+            if preds[0][11] > 0.5:
+                pruning_method = 'BB'
+            else:
+                if preds[0][11] < -0.5:
+                    pruning_method = 'MDSQ'
+                else:
+                    pruning_method = 'None'
+            pruning_cp = int(preds[0][12])
             algorithm_index = 0
             algorithm_score = preds[0][0]
             for i in range(0, 6):
@@ -249,6 +253,9 @@ class autoBaggingClassifier(BaseEstimator):
             print("\tBootstrap: ", bootstrap)
             print("\tBootstrap_features: ",bootstrap_features)
             print("\tMax_samples: ", max_samples)
+            print("\tMax_features: ", max_features)
+            print("\tPruning Method: ", pruning_method)
+            print("\tPruning CutPoint: ", pruning_cp)
             print("\tMax_features: ", max_features)
             print("\tAlgorithm: ", switcher.get(algorithm_index))
             return BaggingClassifier(
@@ -320,6 +327,8 @@ class autoBaggingClassifier(BaseEstimator):
                                   'n_estimators',
                                   'max_samples',
                                   'max_features',
+                                  'pruning_method',
+                                  'pruning_cp',
                                   'Algorithm: Decision Tree (max_depth=1)',
                                   'Algorithm: Decision Tree (max_depth=2)',
                                   'Algorithm: Decision Tree (max_depth=3)',
@@ -344,8 +353,6 @@ class autoBaggingClassifier(BaseEstimator):
                 preds, # vetor de predicts de cada estimator no training data
                 data, # training data
                 cutPoint): # ratio of the total n umber of models to cut off
-
-        
         prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
         print("NumModelos = ", len(preds),"\nPrunedN = ", prunedN)
         weights = []
@@ -364,8 +371,6 @@ class autoBaggingClassifier(BaseEstimator):
             for w in ordem.values():
                 errors[w] = valor
             ordem[i] = np.argmin(errors)
-            
-
             errorU = min(errors)
             predU = []
             for x in range(len(weights)):
@@ -395,22 +400,24 @@ class autoBaggingClassifier(BaseEstimator):
     def _mdsq(self,target, # Target names
                 preds, # Predicts na training data
                 data, # training data
-                cutPoint): # ratio of the total n umber of models to cut off
-        targets = data[target]
-
-        prunedN = (preds.shape[1] - (preds.shape[1] * cutPoint))
+                cutPoint): # ratio of the total number of models to cut off
+        
+        prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
+        print("NumModelos = ", len(preds),"\nPrunedN = ", prunedN)
         pred = [] # 1 ou -1 se acertar ou não
         ens = []
         o = []
-        for i in range(data[targets].length):
+
+
+        for i in range(target.length):
             ens.append(0)
             o.append(0.075)
-
-        for x, tg in zip(preds,data[targets]):
-            if x == tg:
-                pred.append(1)
-            else:
-                pred.append(-1)
+        for i in range(len(preds)):
+            for x, tg in zip(preds[i],target):
+                if x == tg:
+                    pred.append(1)
+                else:
+                    pred.append(-1)
 
         pred = pd.Dataframe(pred)
 
@@ -422,4 +429,5 @@ class autoBaggingClassifier(BaseEstimator):
             ens = ens + pred[min(dist)]
             pred = pd.Dataframe(pred[list(set(pred) - set(min(dist)))]) # Buscar o name em vez do valor, está mal.
             ordem[i] = min(dist) # Como inteiro, pelo nome
+        ordem = {}
         return ordem   
