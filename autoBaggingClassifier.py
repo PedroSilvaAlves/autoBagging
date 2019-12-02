@@ -49,9 +49,9 @@ class autoBaggingClassifier(BaseEstimator):
                                    "bootstrap_features" : [True,False],
                                    "max_samples" : [1.0],
                                    "max_features": [1.0]})
-        self.pruning = ParameterGrid({'pruning_method' : [0],
-                                      'pruning_cp': [0.10,]})
-        self.DStechique = ParameterGrid({ 'ds' : [0,1]})
+        self.pruning = ParameterGrid({'pruning_method' : [-1, 0],
+                                      'pruning_cp': [0.25,0.50]})
+        self.DStechique = ParameterGrid({ 'ds' : [-1, 0,1]})
 
     def fit(self,
             datasets,                # Lista com datasets
@@ -101,38 +101,57 @@ class autoBaggingClassifier(BaseEstimator):
                                 predictions = bagging_workflow.predict(X_train)
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
+                                # PRUNING MODLS
                                 if pruning['pruning_method'] == 1:
                                     print("Waiting for BB")
+                                    print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    # Criar predicts para todos os base-model
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                         predictions.append(estimator.predict(X_train[:, features]))
                                     bb_index= self._bb(y_train, predictions, X_train, pruning['pruning_cp'])
-                                    #print("BB_INDEX = ", bb_index)
                                     # Create VotingClassifier com a lista de bb_index
                                     estimators = []
                                     for i in bb_index.values():
                                         estimators.append(bagging_workflow.estimators_[i])
                                     bagging_workflow.estimators_ = estimators
+                                    print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    print("----------------------------")
                                 else:
                                     if pruning['pruning_method'] == -1:
-                                        print("MDSQ")
-                                
+                                        print("Waiting for MDSQ")
+                                        print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                        # Criar predicts para todos os base-model
+                                        for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                                            predictions.append(estimator.predict(X_train[:, features]))
+                                        mdsq_index= self._mdsq(y_train, predictions, X_train, pruning['pruning_cp'])
+                                        #print("MDSQ_index = ", mdsq_index)
+                                        # Create VotingClassifier com a lista de mdsq_index
+                                        estimators = []
+                                        for i in mdsq_index.values():
+                                            estimators.append(bagging_workflow.estimators_[i])
+                                        bagging_workflow.estimators_ = estimators
+                                        print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                        print("----------------------------")
+                                # Dynamic Select
                                 if DS['ds'] == -1:
-                                    #print("KNORAE BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    print("Waiting for KNORAE")
+                                    print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                     bagging_workflow = KNORAE(bagging_workflow)
                                     bagging_workflow.fit(X_dsel,y_dsel)
-                                    #print("KNORAE AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    #print("----------------------------")
-
-                                if DS['ds'] == 1:
-                                    #print("OLA BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    bagging_workflow = OLA(bagging_workflow)
-                                    bagging_workflow.fit(X_dsel,y_dsel)
-                                    #print("OLA AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    #print("----------------------------")
+                                    print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    print("----------------------------")
+                                else:
+                                    if DS['ds'] == 1:
+                                        print("Waiting for OLA")
+                                        print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                        bagging_workflow = OLA(bagging_workflow)
+                                        bagging_workflow.fit(X_dsel,y_dsel)
+                                        print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                        print("----------------------------")
                                     
                                 predictions = bagging_workflow.predict(X_test)
                                 Rank[base_estimator] = cohen_kappa_score(y_test, predictions)
-                                #print("Rank -> ", Rank[base_estimator])
+
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
                                 meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
@@ -291,7 +310,6 @@ class autoBaggingClassifier(BaseEstimator):
                 for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                     predictions.append(estimator.predict(X[:, features]))
                 bb_index= self._bb(y, predictions, X, pruning_cp)
-                #print("BB_INDEX = ", bb_index)
                 # Create VotingClassifier com a lista de bb_index
                 estimators = []
                 for i in bb_index.values():
@@ -299,23 +317,24 @@ class autoBaggingClassifier(BaseEstimator):
                 bagging_workflow.estimators_ = estimators
             else:
                 if pruning_method == -1:
-                    print("MDSQ")
+                    print("Waiting for MDSQ")
+                    for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                        predictions.append(estimator.predict(X[:, features]))
+                    mdsq_index= self._mdsq(y, predictions, X, pruning_cp)
+                    # Create VotingClassifier com a lista de bb_index
+                    estimators = []
+                    for i in mdsq_index.values():
+                        estimators.append(bagging_workflow.estimators_[i])
+                    bagging_workflow.estimators_ = estimators
             
             if ds == -1:
-                #print("KNORAE BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                 bagging_workflow = KNORAE(bagging_workflow)
                 bagging_workflow.fit(X,y)
-                #print("KNORAE AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                #print("----------------------------")
 
             if ds == 1:
-                #print("OLA BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                 bagging_workflow = OLA(bagging_workflow)
                 bagging_workflow.fit(X,y)
-                #print("OLA AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                #print("----------------------------")
                 
-            predictions = bagging_workflow.predict(X)
             return bagging_workflow
         else:
             print("Erro, error não é um problema de Classifier")
@@ -336,56 +355,57 @@ class autoBaggingClassifier(BaseEstimator):
         meta_features['Number of Examples'] = dataset.shape[0]
         meta_features['Number of Features'] = dataset.shape[1]
         meta_features['Number of Classes'] = dataset[target].unique().shape[0]
-        meta_features_allnames = ['Features.SpearmanCorrelation.Mean',
-                                  'Features.SpearmanCorrelation.StandardDeviation',
-                                  'Features.SpearmanCorrelation.Skew',
-                                  'Features.SpearmanCorrelation.Kurtosis',
-                                  'FeaturesLabels.SpearmanCorrelation.Mean',
-                                  'FeaturesLabels.SpearmanCorrelation.StandardDeviation',
-                                  'FeaturesLabels.SpearmanCorrelation.Skew',
-                                  'FeaturesLabels.SpearmanCorrelation.Kurtosis',
-                                  'Features.Mean.Mean',
-                                  'Features.Mean.StandardDeviation',
-                                  'Features.Mean.Skew',
-                                  'Features.Mean.Kurtosis',
-                                  'Features.StandardDeviation.Mean',
-                                  'Features.StandardDeviation.StandardDeviation',
-                                  'Features.StandardDeviation.Skew',
-                                  'Features.StandardDeviation.Kurtosis',
-                                  'Features.Skew.Mean',
-                                  'Features.Skew.StandardDeviation',
-                                  'Features.Skew.Skew',
-                                  'Features.Skew.Kurtosis',
-                                  'Features.Kurtosis.Mean',
-                                  'Features.Kurtosis.StandardDeviation',
-                                  'Features.Kurtosis.Skew',
-                                  'Features.Kurtosis.Kurtosis',
-                                  'Features.Entropy.Mean',
-                                  'Features.Entropy.StandardDeviation',
-                                  'Features.Entropy.Skew',
-                                  'Features.Entropy.Kurtosis',
-                                  'Features.MutualInformation.Mean',
-                                  'Features.MutualInformation.StandardDeviation',
-                                  'Features.MutualInformation.Skew',
-                                  'Features.MutualInformation.Kurtosis',
-                                  'FeaturesLabels.MutualInformation.Mean',
-                                  'FeaturesLabels.MutualInformation.StandardDeviation',
-                                  'FeaturesLabels.MutualInformation.Skew',
-                                  'FeaturesLabels.MutualInformation.Kurtosis',
-                                  'bootstrap',
-                                  'bootstrap_features',
-                                  'n_estimators',
-                                  'max_samples',
-                                  'max_features',
-                                  'pruning_method',
-                                  'pruning_cp',
-                                  'ds',
-                                  'Algorithm: Decision Tree (max_depth=1)',
-                                  'Algorithm: Decision Tree (max_depth=2)',
-                                  'Algorithm: Decision Tree (max_depth=3)',
-                                  'Algorithm: Decision Tree (max_depth=4)',
-                                  'Algorithm: Naive Bayes',
-                                  'Algorithm: Majority Class']
+        meta_features_allnames = [
+        'Features.SpearmanCorrelation.Mean',
+        'Features.SpearmanCorrelation.StandardDeviation',
+        'Features.SpearmanCorrelation.Skew',
+        'Features.SpearmanCorrelation.Kurtosis',
+        'FeaturesLabels.SpearmanCorrelation.Mean',
+        'FeaturesLabels.SpearmanCorrelation.StandardDeviation',
+        'FeaturesLabels.SpearmanCorrelation.Skew',
+        'FeaturesLabels.SpearmanCorrelation.Kurtosis',
+        'Features.Mean.Mean',
+        'Features.Mean.StandardDeviation',
+        'Features.Mean.Skew',
+        'Features.Mean.Kurtosis',
+        'Features.StandardDeviation.Mean',
+        'Features.StandardDeviation.StandardDeviation',
+        'Features.StandardDeviation.Skew',
+        'Features.StandardDeviation.Kurtosis',
+        'Features.Skew.Mean',
+        'Features.Skew.StandardDeviation',
+        'Features.Skew.Skew',
+        'Features.Skew.Kurtosis',
+        'Features.Kurtosis.Mean',
+        'Features.Kurtosis.StandardDeviation',
+        'Features.Kurtosis.Skew',
+        'Features.Kurtosis.Kurtosis',
+        'Features.Entropy.Mean',
+        'Features.Entropy.StandardDeviation',
+        'Features.Entropy.Skew',
+        'Features.Entropy.Kurtosis',
+        'Features.MutualInformation.Mean',
+        'Features.MutualInformation.StandardDeviation',
+        'Features.MutualInformation.Skew',
+        'Features.MutualInformation.Kurtosis',
+        'FeaturesLabels.MutualInformation.Mean',
+        'FeaturesLabels.MutualInformation.StandardDeviation',
+        'FeaturesLabels.MutualInformation.Skew',
+        'FeaturesLabels.MutualInformation.Kurtosis',
+        'bootstrap',
+        'bootstrap_features',
+        'n_estimators',
+        'max_samples',
+        'max_features',
+        'pruning_method',
+        'pruning_cp',
+        'ds',
+        'Algorithm: Decision Tree (max_depth=1)',
+        'Algorithm: Decision Tree (max_depth=2)',
+        'Algorithm: Decision Tree (max_depth=3)',
+        'Algorithm: Decision Tree (max_depth=4)',
+        'Algorithm: Naive Bayes',
+        'Algorithm: Majority Class']
         for feature_name in meta_features_allnames:
             if not (feature_name) in meta_features:
                 meta_features[feature_name] = np.nan
@@ -398,6 +418,7 @@ class autoBaggingClassifier(BaseEstimator):
                 print("Não é válido o Dataset")
                 return False
         return True
+        
 
     # Prunning: Boosting-based pruning of models
     def _bb(self,target, # Target names
@@ -405,7 +426,6 @@ class autoBaggingClassifier(BaseEstimator):
                 data, # training data
                 cutPoint): # ratio of the total n umber of models to cut off
         prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
-        #print("Numero Modelos before Pruning = ", len(preds),"\nNumero Modelos after Pruning = ", prunedN)
         weights = []
         for i in range(data.shape[0]):
             weights.append(1/data.shape[0])
@@ -454,31 +474,35 @@ class autoBaggingClassifier(BaseEstimator):
                 cutPoint): # ratio of the total number of models to cut off
         
         prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
-        print("NumModelos = ", len(preds),"\nPrunedN = ", prunedN)
         pred = [] # 1 ou -1 se acertar ou não
         ens = []
         o = []
-
-
-        for i in range(target.length):
+        for i in range(len(preds)):
+            pred_i = []
+            for x in range(data.shape[0]):
+                pred_i.append(int(preds[i][x] == target[x]))
+            pred.append(pred_i)
+        for i in range(data.shape[0]):
             ens.append(0)
             o.append(0.075)
-        for i in range(len(preds)):
-            for x, tg in zip(preds[i],target):
-                if x == tg:
-                    pred.append(1)
-                else:
-                    pred.append(-1)
-
-        pred = pd.Dataframe(pred)
-
-        ordem = []
+        
+        pred = np.array(pred)
+        ordem = {}
+        selected = []
         for i in range(1,prunedN):
             dist = []
-            for x, y, z in zip(pred, ens, o):
-                dist.append(m.sqrt(sum((((x + y) / i) - z)^2)))
-            ens = ens + pred[min(dist)]
-            pred = pd.Dataframe(pred[list(set(pred) - set(min(dist)))]) # Buscar o name em vez do valor, está mal.
-            ordem[i] = min(dist) # Como inteiro, pelo nome
-        ordem = {}
+            for x in range(len(pred)):
+                aux = 0
+                if selected.__contains__(x):
+                    aux = 10.000e+300
+                else:
+                    for w, y, z in zip(pred[x],ens,o):
+                        aux = aux + pow(((w + y)/ i) - z,2)
+                dist.append(m.sqrt(aux))
+                aux = []
+            for y in range(len(ens)):
+                aux.append(ens[y] + pred[np.argmin(dist)][y])
+            ens = aux
+            selected.append(np.argmin(dist))
+            ordem[i] = np.argmin(dist)
         return ordem   

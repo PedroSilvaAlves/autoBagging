@@ -4,6 +4,7 @@ import xgboost as xgb
 import math as m
 import joblib
 import warnings
+import openml
 from autoBaggingClassifier import autoBaggingClassifier
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
@@ -34,6 +35,7 @@ from metafeatures.core.engine import metafeature_generator
 warnings.simplefilter(action='ignore', category=FutureWarning)
 TargetNames = []
 Datasets = []
+# ### LOCAL DATASETS ###
 try:
     Datasets.append(pd.read_csv('./datasets_classifier/titanic.csv'))
     TargetNames.append('Survived')
@@ -43,8 +45,18 @@ except FileNotFoundError:
     print(
         "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
     quit()
+######################
 
+####### OPENML #######
 
+# index = [1,21,6,31]
+# for i in index:
+#     dataset = openml.datasets.get_dataset(i)
+#     X, y, categorical_indicator, attribute_names = dataset.get_data(dataset_format='dataframe')
+#     target = dataset.default_target_attribute
+#     Datasets.append(X)
+#     TargetNames.append(target)
+#####################
 
 post_processing_steps = [Mean(),
                          StandardDeviation(),
