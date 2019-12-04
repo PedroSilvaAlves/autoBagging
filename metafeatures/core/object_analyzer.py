@@ -82,6 +82,8 @@ def _get_pd_attribute_types(dataframe, target_attributes):
         elif dtype in (np.int, np.int32, np.int64, np.float, np.float32,
                        np.float64, int, float):
             attribute_type= 'numerical'
+        elif dtype == 'category':
+            attribute_type = 'categorical'
         else:
             raise ValueError('Unknown dtype %s for column %s.' %
                              (str(dtype), column_name))
