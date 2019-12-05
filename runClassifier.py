@@ -45,8 +45,7 @@ Datasets = []
 #     #TargetNames.append('Survived')
 #     Datasets.append(pd.read_csv('./datasets_classifier/heart.csv'))
 #     TargetNames.append('target')
-#     Datasets.append(pd.read_csv('./datasets_classifier/titanic.csv'))
-#     TargetNames.append('Survived')
+#     Datasets.append(pd.read_csv('./datasets_classifier/titanic.csv'))#     TargetNames.append('Survived')
 # except FileNotFoundError:
 #     print(
 #         "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
@@ -68,15 +67,13 @@ for i in index:
         if y_type in ['binary', 'multiclass', 'multiclass-multioutput',
                       'multilabel-indicator', 'multilabel-sequences']:
             if dtype in (np.object,):
-                print("Valid ", i)
-                print("y_type = ",y_type)
+                print("Dataset Válido = ",y_type)
                 Datasets.append(X)
                 TargetNames.append(target)
                 GoodDatasets.append(i)
             elif dtype in (np.int, np.int32, np.int64, np.float, np.float32,
                         np.float64, int, float):
-                print("Valid ", i)
-                print("y_type = ",y_type)
+                print("Dataset Válido = ",y_type)
                 Datasets.append(X)
                 TargetNames.append(target)
                 GoodDatasets.append(i)
