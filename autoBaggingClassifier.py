@@ -46,11 +46,11 @@ class autoBaggingClassifier(BaseEstimator):
                                 }
         self.grid = ParameterGrid({"n_estimators" : [50,100],
                                    "bootstrap" : [True],
-                                   "bootstrap_features" : [False,True],
+                                   "bootstrap_features" : [False],
                                    "max_samples" : [1.0],
                                    "max_features": [1.0]})
-        self.pruning = ParameterGrid({'pruning_method' : [-1,0],
-                                      'pruning_cp': [0.25]})
+        self.pruning = ParameterGrid({'pruning_method' : [-1,0,1],
+                                      'pruning_cp': [0.25,0.5]})
         self.DStechique = ParameterGrid({ 'ds' : [-1, 0, 1]})
 
     def fit(self,
@@ -65,8 +65,9 @@ class autoBaggingClassifier(BaseEstimator):
         for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para criar Meta Data
             if self._validateDataset(dataset, target):
                 ndataset= ndataset+1
+                print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
-                # Tratar do Dataset
+                print("________________________________________________________________________")# Tratar do Dataset
                 # Drop Categorial features sklearn não aceita
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
