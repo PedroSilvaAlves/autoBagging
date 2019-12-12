@@ -42,16 +42,19 @@ class autoBaggingClassifier(BaseEstimator):
         self.base_estimators = {'Decision Tree (max_depth=1)': DecisionTreeClassifier(max_depth=1, random_state=0),
                                 'Decision Tree (max_depth=2)': DecisionTreeClassifier(max_depth=2, random_state=0),
                                 'Decision Tree (max_depth=3)': DecisionTreeClassifier(max_depth=3, random_state=0),
-                                'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4, random_state=0)
-                                }
-        self.grid = ParameterGrid({"n_estimators" : [50,100],
+                                'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4, random_state=0)}
+        self.estimators_switcher = {'Decision Tree (max_depth=1)': 1,
+                                    'Decision Tree (max_depth=2)': 2,
+                                    'Decision Tree (max_depth=3)': 3,
+                                    'Decision Tree (max_depth=4)': 4}
+        self.grid = ParameterGrid({"n_estimators" : [50,100,200],
                                    "bootstrap" : [True],
                                    "bootstrap_features" : [False],
                                    "max_samples" : [1.0],
                                    "max_features": [1.0]})
         self.pruning = ParameterGrid({'pruning_method' : [-1,0,1],
-                                      'pruning_cp': [0.25,0.5]})
-        self.DStechique = ParameterGrid({ 'ds' : [-1, 0, 1]})
+                                      'pruning_cp': [0.25,0.5,0.75]})
+        self.DStechique = ParameterGrid({ 'ds' : [-1,0,1]})
 
     def fit(self,
             datasets,                # Lista com datasets
@@ -86,27 +89,27 @@ class autoBaggingClassifier(BaseEstimator):
                 
                 y_train = y_train.reset_index(drop=True)
                 y_test = y_test.reset_index(drop=True)
+
                 # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     for DS in self.DStechique:
                         for pruning in self.pruning:
-                            meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
-                            Rank = {}
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
+                                meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
                                 # Criar modelo
                                 bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
                                                                         random_state=0,
                                                                         **params)
                                 # Treinar o modelo
                                 print("\n\n")
-                                print(params,base_estimator)
+                                print("Dataset nº",ndataset,"\n",params,base_estimator)
                                 bagging_workflow.fit(X_train, y_train)
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
                                 # PRUNING MODLS
-                                if pruning['pruning_method'] == 1:
+                                if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
                                     print("Waiting for BB")
-                                    #print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                     # Criar predicts para todos os base-model
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                         predictions.append(estimator.predict(X_train[:, features]))
@@ -116,10 +119,10 @@ class autoBaggingClassifier(BaseEstimator):
                                     for i in bb_index.values():
                                         estimators.append(bagging_workflow.estimators_[i])
                                     bagging_workflow.estimators_ = estimators
-                                    #print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    #print("----------------------------")
+                                    print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    print("----------------------------")
                                 else:
-                                    if pruning['pruning_method'] == -1:
+                                    if pruning['pruning_method'] == -1 and pruning['pruning_cp'] != 0:
                                         print("Waiting for MDSQ")
                                         print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                         # Criar predicts para todos os base-model
@@ -131,27 +134,28 @@ class autoBaggingClassifier(BaseEstimator):
                                         for i in mdsq_index.values():
                                             estimators.append(bagging_workflow.estimators_[i])
                                         bagging_workflow.estimators_ = estimators
-                                        #print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                        #print("----------------------------")
+                                        print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                        print("----------------------------")
                                 # Dynamic Select
                                 if DS['ds'] == -1:
                                     print("Waiting for KNORAE")
                                     print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                     bagging_workflow = KNORAE(bagging_workflow, k=3)
                                     bagging_workflow.fit(X_train,y_train)
-                                    #print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    #print("----------------------------")
+                                    print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                    print("----------------------------")
                                 else:
                                     if DS['ds'] == 1:
                                         print("Waiting for OLA")
                                         print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                         bagging_workflow = OLA(bagging_workflow, k=3)
                                         bagging_workflow.fit(X_train,y_train)
-                                        #print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                        #print("----------------------------")
+                                        print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
+                                        print("----------------------------")
                                 predictions = bagging_workflow.predict(X_test)
-                                Rank[base_estimator] = cohen_kappa_score(y_test, predictions)
-                                print("Rank --> ",Rank[base_estimator])
+                                Rank = cohen_kappa_score(y_test, bagging_workflow.predict(X_test))
+
+                                print("Rank --> ", Rank)
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
                                 meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
@@ -161,29 +165,15 @@ class autoBaggingClassifier(BaseEstimator):
                                 meta_features['pruning_method'] = pruning['pruning_method']
                                 meta_features['pruning_cp'] = pruning['pruning_cp']
                                 meta_features['ds'] = DS['ds']
-                            # Fim combinação dos algoritmos base, ainda dentro da Combinação de Parametros
-                            i = 1
-                            for base_estimator in sorted(Rank, key=Rank.__getitem__, reverse=True):
-                                # Ordena os algoritmos atravez do landmark e atribui um rank (1 é o melhor)
-                                meta_features['Algorithm: ' + base_estimator] = i
-                                Rank[base_estimator] = i
-                                i = i+1
-                            array_rank = [] # Este array vai contem o target deste algoritmo
-                            for value in Rank.values():
-                                array_rank.append(int(value))  # Adicina os ranks dos algoritmos
-                            # Adiciona os vários parametros
-                            array_rank.append(int(params['n_estimators']))
-                            array_rank.append(int(np.multiply(params['bootstrap'], 1)))
-                            array_rank.append(int(np.multiply(params['bootstrap_features'], 1)))
-                            array_rank.append(int(params['max_samples']))
-                            array_rank.append(int(params['max_features']))
-                            array_rank.append(int(pruning['pruning_method']))
-                            array_rank.append(int(pruning['pruning_cp']*100))
-                            array_rank.append(int(DS['ds']))
+                                meta_features['Algorithm'] = self.estimators_switcher[base_estimator]
+                                #array_rank = [] # Este array vai contem o target deste algoritmo
+                                #array_rank.append(float(Rank))  # Adicina o dos algoritmos
+                                # Este array é o meta target do score do algoritmo
+                                y_meta.append(float(Rank))
+                                # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
+                                x_meta.append(meta_features)
 
-                            y_meta.append(array_rank)
-                            # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
-                            x_meta.append(meta_features)
+                                
 
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
@@ -205,14 +195,12 @@ class autoBaggingClassifier(BaseEstimator):
 
         print("Constructing Meta-Model:")
         # Criar o Meta Model XGBOOST
-        meta_model = xgb.XGBClassifier(objective="reg:squarederror",
+        self.meta_model = xgb.XGBRegressor(objective="reg:squarederror",
                                         colsample_bytree=0.3,
                                         learning_rate=0.1,
                                         max_depth=5,
                                         alpha=10,
                                         n_estimators=100)
-        self.meta_model = MultiOutputClassifier(meta_model)
-
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
         return self
@@ -222,70 +210,83 @@ class autoBaggingClassifier(BaseEstimator):
             for f in dataset.columns:
                 if dataset[f].dtype == 'object':
                     dataset = dataset.drop(columns=f, axis=1)
-            meta_features = self._metafeatures(
+
+            meta_features_estematic = self._metafeatures(
                 dataset, target, self.meta_functions, self.post_processing_steps)
-            
-            # Trata dataset para a predict
-            X_meta = pd.DataFrame(meta_features, index=[0])
-            X_meta.fillna((-999), inplace=True)
-            X_meta = X_meta.astype(float)
-
-            # Predict the best algorithm
-            preds = self.meta_model.predict(X_meta)
-
+            simpleImputer = SimpleImputer()
+            X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
+            y = dataset[target]
+            BestScore = -1
+            score = 0
+            RecommendedBagging = {}
+            for params in self.grid:  # Combinações de Parametros
+                    for DS in self.DStechique:
+                        for pruning in self.pruning:
+                            for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
+                                meta_features = meta_features_estematic.copy()
+                                meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
+                                meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
+                                meta_features['n_estimators'] = params['n_estimators']
+                                meta_features['max_samples'] = params['max_samples']
+                                meta_features['max_features'] = params['max_features']
+                                meta_features['pruning_method'] = pruning['pruning_method']
+                                meta_features['pruning_cp'] = pruning['pruning_cp']
+                                meta_features['ds'] = DS['ds']
+                                meta_features['Algorithm'] = self.estimators_switcher[base_estimator]
+                                meta_features_dic = meta_features
+                                features = []
+                                features.append(meta_features)
+                                meta_features = pd.DataFrame(features)
+                                score = self.meta_model.predict(np.array(meta_features))
+                                if score > BestScore:
+                                    BestScore=score
+                                    best_base_estimator = base_estimator
+                                    RecommendedBagging = {}
+                                    RecommendedBagging = meta_features_dic.copy()
             # Prints e construção do Bagging previsto
-            n_estimators = int(preds[0][4])
-            bootstrap = bool(preds[0][5])
-            bootstrap_features = bool(preds[0][6])
-            max_samples = float(preds[0][7])
-            max_features = float(preds[0][8])
-            pruning_method = int(preds[0][9])
-            pruning_cp = int(preds[0][10]/100)
-            ds = int(preds[0][11])
+            n_estimators = int(RecommendedBagging['n_estimators'])
+            bootstrap = bool(RecommendedBagging['bootstrap'])
+            bootstrap_features = bool(RecommendedBagging['bootstrap_features'])
+            max_samples = float(RecommendedBagging['max_samples'])
+            max_features = float(RecommendedBagging['max_features'])
+            pruning_method = int(RecommendedBagging['pruning_method'])
+            pruning_cp = int(RecommendedBagging['pruning_cp']/100)
+            ds = int(RecommendedBagging['ds'])
+            base_estimator = best_base_estimator
 
             # String para visualização
-            if preds[0][9] == 1:
+            if pruning_method == 1:
                 pruning_method_str = 'BB'
             else:
-                if preds[0][9] == -1:
+                if pruning_method == -1:
                     pruning_method_str = 'MDSQ'
                 else:
                     pruning_method_str = 'None'
-            if preds[0][11] > 0.5:
+            if ds > 0.5:
                 ds_str = 'KNORAE'
             else:
-                if preds[0][11] < -0.5:
+                if ds < -0.5:
                     ds_str = 'OLA'
                 else:
                     ds_str = 'None'
-            algorithm_index = 0
-            algorithm_score = preds[0][0]
-            for i in range(0, 4):
-                if preds[0][i] < algorithm_score:
-                    algorithm_score = preds[0][i]
-                    algorithm_index = i
-            switcher = {
-               -1: "Error",
-                0: "Decision Tree (max_depth=1)",
-                1: "Decision Tree (max_depth=2)",
-                2: "Decision Tree (max_depth=3)",
-                3: "Decision Tree (max_depth=4)",
-                }
-
+            
             print("Recommended Bagging workflow: ")
             print("\tNumber of models: ", n_estimators)
             print("\tBootstrap: ", bootstrap)
             print("\tBootstrap_features: ",bootstrap_features)
             print("\tMax_samples: ", max_samples)
             print("\tMax_features: ", max_features)
-            print("\tPruning Method: ", pruning_method_str)
-            print("\tPruning CutPoint: ", pruning_cp*100)
+            if pruning_method != 0:
+                print("\tPruning Method: ", pruning_method_str)
+                print("\tPruning CutPoint: ", pruning_cp*100)
+            else:
+                print("\tPruning: ",pruning_method_str)
             print("\tDynamic Selection: ", ds_str)
-            print("\tAlgorithm: ", switcher.get(algorithm_index))
+            print("\tAlgorithm: ", base_estimator)
 
             # BaggingWorkflow
             bagging_workflow = BaggingClassifier(
-                    base_estimator= self.base_estimators[switcher.get(algorithm_index)],
+                    base_estimator= self.base_estimators[base_estimator],
                     n_estimators=n_estimators,
                     bootstrap=bootstrap,
                     bootstrap_features=bootstrap_features,
@@ -302,9 +303,8 @@ class autoBaggingClassifier(BaseEstimator):
             y_train = y
             # Treinar o modelo
             bagging_workflow.fit(X_train, y_train)
-            predictions = bagging_workflow.predict(X_train)
-
-            if pruning_method == 1:
+            predictions = []
+            if pruning_method == 1 and pruning_cp != 0:
                 print("Waiting for BB")
                 for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                     predictions.append(estimator.predict(X_train[:, features]))
@@ -315,7 +315,7 @@ class autoBaggingClassifier(BaseEstimator):
                     estimators.append(bagging_workflow.estimators_[i])
                 bagging_workflow.estimators_ = estimators
             else:
-                if pruning_method == -1:
+                if pruning_method == -1 and pruning_cp != 0:
                     print("Waiting for MDSQ")
                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                         predictions.append(estimator.predict(X_train[:, features]))
@@ -398,10 +398,7 @@ class autoBaggingClassifier(BaseEstimator):
         'pruning_method',
         'pruning_cp',
         'ds',
-        'Algorithm: Decision Tree (max_depth=1)',
-        'Algorithm: Decision Tree (max_depth=2)',
-        'Algorithm: Decision Tree (max_depth=3)',
-        'Algorithm: Decision Tree (max_depth=4)'
+        'Algorithm'
         ]
         for feature_name in meta_features_allnames:
             if not (feature_name) in meta_features:
@@ -409,12 +406,6 @@ class autoBaggingClassifier(BaseEstimator):
         return meta_features
 
     def _validateDataset(self, dataset, target):
-        # Classificação Binária
-        #if dataset[target].dtype != 'object':
-        #    if sorted(dataset[target].unique()) != [0, 1]:
-        #        print("Não é válido o Dataset")
-        #        return False
-        #return True
         dtype = dataset[target].dtype
         if dtype in (np.object,):
             return True
