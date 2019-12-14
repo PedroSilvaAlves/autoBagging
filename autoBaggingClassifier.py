@@ -67,18 +67,18 @@ class autoBaggingClassifier(BaseEstimator):
         ndataset = 0
         for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para criar Meta Data
             if self._validateDataset(dataset, target):
-                ndataset= ndataset+1
+                ndataset= ndataset + 1
                 print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
-                print("________________________________________________________________________")# Tratar do Dataset
+                print("________________________________________________________________________") # Tratar do Dataset
                 # Drop Categorial features sklearn não aceita
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
                         dataset = dataset.drop(columns=f, axis=1)
-                #print(dataset.head())
                 # MetaFeatures
                 meta_features_estematic = self._metafeatures(
                     dataset, target, self.meta_functions, self.post_processing_steps)
+                
                 # Dividir o dataset em exemplos e os targets
                 simpleImputer = SimpleImputer()
                 X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
@@ -89,7 +89,6 @@ class autoBaggingClassifier(BaseEstimator):
                 
                 y_train = y_train.reset_index(drop=True)
                 y_test = y_test.reset_index(drop=True)
-
                 # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     for DS in self.DStechique:
@@ -335,7 +334,7 @@ class autoBaggingClassifier(BaseEstimator):
                 bagging_workflow.fit(X_train,y_train)
             return bagging_workflow
         else:
-            print("Erro, error não é um problema de Classificação")
+            print("Erro, não é um problema de Classificação")
 
     def _metafeatures(self, dataset, target, meta_functions, post_processing_steps):
 

@@ -4,6 +4,7 @@ import xgboost as xgb
 import math as m
 import joblib
 import warnings
+import openml
 from autoBaggingRegressor import autoBaggingRegressor
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
@@ -34,22 +35,30 @@ from metafeatures.core.engine import metafeature_generator
 #######################################################
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
+openml.config.apikey = '2754bfd67b4aa8a5854f00d3fc4bdd89'
 TargetNames = []
-FileNameDataset = []
-
-
-FileNameDataset.append('./datasets_regressor/analcatdata_negotiation.csv')
-TargetNames.append('Future_business')
-FileNameDataset.append('./datasets_regressor/baseball.csv')
-TargetNames.append('RS')
-FileNameDataset.append('./datasets_regressor/phpRULnTn.csv')
-TargetNames.append('oz26')
-FileNameDataset.append('./datasets_regressor/dataset_2193_autoPrice.csv')
-TargetNames.append('class')
-FileNameDataset.append('./datasets_regressor/dataset_8_liver-disorders.csv')
-TargetNames.append('drinks')
-FileNameDataset.append('./datasets_regressor/cpu_small.csv')
-TargetNames.append('usr')
+Datasets = []
+### LOCAL DATASETS ###
+try:
+    
+    
+    Datasets.append(pd.read_csv('./datasets_regressor/analcatdata_negotiation.csv'))
+    TargetNames.append('Future_business')
+    Datasets.append(pd.read_csv('./datasets_regressor/baseball.csv'))
+    TargetNames.append('RS')
+    Datasets.append(pd.read_csv('./datasets_regressor/phpRULnTn.csv'))
+    TargetNames.append('oz26')
+    Datasets.append(pd.read_csv('./datasets_regressor/dataset_2193_autoPrice.csv'))
+    TargetNames.append('class')
+    Datasets.append(pd.read_csv('./datasets_regressor/dataset_8_liver-disorders.csv'))
+    TargetNames.append('drinks')
+    Datasets.append(pd.read_csv('./datasets_regressor/cpu_small.csv'))
+    TargetNames.append('usr')
+except FileNotFoundError:
+    print(
+        "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
+    quit()
+######################
 
 post_processing_steps = [Mean(),
                          StandardDeviation(),
@@ -73,7 +82,7 @@ meta_functions = [Entropy(),
 print("\n\n\n***************** AutoBagging Regressor *****************")
 model = autoBaggingRegressor(meta_functions=meta_functions,
                              post_processing_steps=post_processing_steps)
-model = model.fit(FileNameDataset, TargetNames)
+model = model.fit(Datasets, TargetNames)
 joblib.dump(model, "./models/autoBaggingRegressorModel.sav")
 
 
@@ -87,26 +96,34 @@ targetname = 'chol'
 dataset.fillna((-999), inplace=True)
 for f in dataset.columns:
     if dataset[f].dtype == 'object':
-        lbl = LabelEncoder()
-        lbl.fit(list(dataset[f].values))
-        dataset[f] = lbl.transform(list(dataset[f].values))
-X = SimpleImputer().fit_transform(dataset.drop(targetname, axis=1))
-y = dataset[targetname]
+        dataset = dataset.drop(columns=f, axis=1)
+
+dataset_train, dataset_test = train_test_split(dataset,test_size=0.33,
+                                                    random_state=0,shuffle=True)
+X_train = SimpleImputer().fit_transform(dataset_train.drop(targetname, axis=1))
+y_train = dataset_train[targetname]
+X_test = SimpleImputer().fit_transform(dataset_test.drop(targetname, axis=1))
+y_test = dataset_test[targetname]
 
 # Getting recommended Bagging model of the dataset
-bestBagging = model.predict(dataset,targetname)
+bestBagging = model.predict(dataset_train,targetname)
 
 # Getting Default Bagging
 DefaultBagging = BaggingRegressor(random_state=0)
-
+DefaultBagging.fit(X_train,y_train)
 print("Verify Bagging algorithm score:")
 #######################################################
 ################## Testing Bagging ####################
 #######################################################
-kfold = KFold(n_splits=10, random_state=0)
-cv_results = cross_val_score(bestBagging, X, y, cv=kfold, scoring='neg_mean_squared_error')
-print("Recommended Bagging --> Score: %0.2f (+/-) %0.2f)" % (abs(cv_results.mean()), cv_results.std() * 2))
+score = bestBagging.score(X_test,y_test)
+print("Recommended  Bagging --> Score: %0.2f" % score)
+score = DefaultBagging.score(X_test,y_test)
+print("Default Bagging --> Score: %0.2f" % score)
 
-kfold = KFold(n_splits=10, random_state=0)
-cv_results = cross_val_score(DefaultBagging, X, y, cv=kfold, scoring='neg_mean_squared_error')
-print("Default Bagging --> Score: %0.2f (+/-) %0.2f)" % (abs(cv_results.mean()), cv_results.std() * 2))
+# kfold = KFold(n_splits=10, random_state=0)
+# cv_results = cross_val_score(bestBagging, X, y, cv=kfold, scoring='neg_mean_squared_error')
+# print("Recommended Bagging --> Score: %0.2f (+/-) %0.2f)" % (abs(cv_results.mean()), cv_results.std() * 2))
+
+# kfold = KFold(n_splits=10, random_state=0)
+# cv_results = cross_val_score(DefaultBagging, X, y, cv=kfold, scoring='neg_mean_squared_error')
+# print("Default Bagging --> Score: %0.2f (+/-) %0.2f)" % (abs(cv_results.mean()), cv_results.std() * 2))
