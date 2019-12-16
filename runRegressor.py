@@ -34,7 +34,8 @@ from metafeatures.core.engine import metafeature_generator
 ################### MAIN FUNCTION #####################
 #######################################################
 
-warnings.simplefilter(action='ignore', category=FutureWarning)
+#warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.filterwarnings("ignore")
 openml.config.apikey = '2754bfd67b4aa8a5854f00d3fc4bdd89'
 TargetNames = []
 Datasets = []

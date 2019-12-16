@@ -32,6 +32,7 @@ from deslib.dcs.ola import OLA
 class autoBaggingRegressor(BaseEstimator):
 
     def __init__(self, meta_functions,post_processing_steps):
+        super().__init__()
         self.meta_functions = meta_functions
         self.post_processing_steps = post_processing_steps
                            
@@ -49,9 +50,9 @@ class autoBaggingRegressor(BaseEstimator):
                                    "bootstrap_features" : [True],
                                    "max_samples": [1.0],
                                    "max_features": [1.0]})
-        self.pruning = ParameterGrid({'pruning_method' : [0],
-                                      'pruning_cp': [0]})
-        self.DStechique = ParameterGrid({ 'ds' : [-1,0,1]})
+        self.pruning = ParameterGrid({'pruning_method' : [1],
+                                      'pruning_cp': [0.5]})
+        self.DStechique = ParameterGrid({ 'ds' : [0]})
     
     def fit(self,
             datasets,                # Lista com datasets
@@ -113,34 +114,20 @@ class autoBaggingRegressor(BaseEstimator):
                                 predictions = []
                                 # PRUNING MODLS
                                 if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
-                                    print("Waiting for BB")
+                                    print("Waiting for RE")
                                     print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
                                     # Criar predicts para todos os base-model
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                         predictions.append(estimator.predict(X_train[:, features]))
-                                    bb_index= self._bb(y_train, predictions, X_train, pruning['pruning_cp'])
+                                    re_index= self._re(y_train, predictions, X_train, pruning['pruning_cp'])
                                     # Pruning the bagging_workflow
                                     estimators = []
-                                    for i in bb_index.values():
+                                    for i in re_index.values():
                                         estimators.append(bagging_workflow.estimators_[i])
                                     bagging_workflow.estimators_ = estimators
                                     print("RANK AFTER-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
                                     print("----------------------------")
-                                else:
-                                    if pruning['pruning_method'] == -1 and pruning['pruning_cp'] != 0:
-                                        print("Waiting for MDSQ")
-                                        print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                        # Criar predicts para todos os base-model
-                                        for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
-                                            predictions.append(estimator.predict(X_train[:, features]))
-                                        mdsq_index= self._mdsq(y_train, predictions, X_train, pruning['pruning_cp'])
-                                        # Pruning the bagging_workflow
-                                        estimators = []
-                                        for i in mdsq_index.values():
-                                            estimators.append(bagging_workflow.estimators_[i])
-                                        bagging_workflow.estimators_ = estimators
-                                        print("RANK AFTER-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                        print("----------------------------")
+                                
                                 # Dynamic Select
                                 if DS['ds'] == -1:
                                     print("Waiting for KNORAE")
@@ -192,6 +179,7 @@ class autoBaggingRegressor(BaseEstimator):
         self.meta_target = np.array(y_meta)
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Regressor.csv')
+        self.meta_target.to_csv('./metadata/Meta_Target_Regressor.csv')
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
@@ -269,12 +257,9 @@ class autoBaggingRegressor(BaseEstimator):
 
             # String para visualização
             if pruning_method == 1:
-                pruning_method_str = 'BB'
+                pruning_method_str = 'RE'
             else:
-                if pruning_method == -1:
-                    pruning_method_str = 'MDSQ'
-                else:
-                    pruning_method_str = 'None'
+                pruning_method_str = 'None'
             if ds > 0.5:
                 ds_str = 'KNORAE'
             else:
@@ -318,26 +303,15 @@ class autoBaggingRegressor(BaseEstimator):
             bagging_workflow.fit(X_train, y_train)
             predictions = []
             if pruning_method == 1 and pruning_cp != 0:
-                print("Waiting for BB")
+                print("Waiting for RE")
                 for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                     predictions.append(estimator.predict(X_train[:, features]))
-                bb_index= self._bb(y_train, predictions, X_train, pruning_cp)
+                re_index= self._re(y_train, predictions, X_train, pruning_cp)
                 # Pruning the bagging_workflow
                 estimators = []
-                for i in bb_index.values():
+                for i in re_index.values():
                     estimators.append(bagging_workflow.estimators_[i])
                 bagging_workflow.estimators_ = estimators
-            else:
-                if pruning_method == -1 and pruning_cp != 0:
-                    print("Waiting for MDSQ")
-                    for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
-                        predictions.append(estimator.predict(X_train[:, features]))
-                    mdsq_index= self._mdsq(y_train, predictions, X_train, pruning_cp)
-                    # Pruning the bagging_workflow
-                    estimators = []
-                    for i in mdsq_index.values():
-                        estimators.append(bagging_workflow.estimators_[i])
-                    bagging_workflow.estimators_ = estimators
                     
             if ds == -1:
                 bagging_workflow = KNORAE(bagging_workflow)
@@ -428,99 +402,40 @@ class autoBaggingRegressor(BaseEstimator):
         else:
             print("Não é válido o Dataset")
             return False
-
-    # Prunning: Boosting-based pruning of models
-    def _bb(self,target, # Target names
-                preds, # vetor de predicts de cada estimator no training data
-                data, # training data
-                cutPoint): # ratio of the total n umber of models to cut off
-
-        prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
-        weights = []
-        for i in range(data.shape[0]):
-            weights.append(1/data.shape[0])
-
-        ordem = {}
-        for i in range(prunedN):
-            errors = []
-            for w in range(len(preds)):
-                erro = 0
-                for x in range(len(weights)):
-                    erro = erro + ((not((preds[w][x] == target[x]))* -1) * weights[x])
-                errors.append(erro)
-            valor  = max(errors) *2
-            for w in ordem.values():
-                errors[w] = valor
-            ordem[i] = np.argmin(errors)
-            errorU = min(errors)
-            predU = []
-            for x in range(len(weights)):
-                predU.append(preds[ordem[i]][x] == target[x])
-
-            if errorU > 0.5:
-                weights = []
-                for i in range(data.shape[0]):
-                    weights.append(1/data.shape[0])
-            else:
-                for w in range(len(weights)):
-                    if predU[w] == True:
-                        try:
-                            weights[w] = weights[w] / (2*errorU)
-                            break
-                        except ZeroDivisionError:
-                            weights[w] = 10.000e+300
-                    else:
-                        try:
-                            weights[w] = weights[w] / (2*(1 - errorU))
-                            break
-                        except ZeroDivisionError:
-                            weights[w] = 10.000e+300
-        return ordem
-
-    # Prunning: Margin Distance Minimization   
-    def _mdsq(self,target, # Target names
-                preds, # Predicts na training data
-                data, # training data
-                cutPoint): # ratio of the total number of models to cut off
-        
-        prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
-        pred = [] # 1 ou -1 se acertar ou não
-        ens = []
-        o = []
-        for i in range(len(preds)):
-            pred_i = []
-            for x in range(data.shape[0]):
-                pred_i.append(int(preds[i][x] == target[x]))
-            pred.append(pred_i)
-        for i in range(data.shape[0]):
-            ens.append(0)
-            o.append(0.075)
-        
-        pred = np.array(pred)
-        ordem = {}
-        selected = []
-        for i in range(1,prunedN):
-            dist = []
-            for x in range(len(pred)):
-                aux = 0
-                if selected.__contains__(x):
-                    aux = 10.000e+300
-                else:
-                    for w, y, z in zip(pred[x],ens,o):
-                        aux = aux + pow(((w + y)/ i) - z,2)
-                dist.append(m.sqrt(aux))
-                aux = []
-            for y in range(len(ens)):
-                aux.append(ens[y] + pred[np.argmin(dist)][y])
-            ens = aux
-            selected.append(np.argmin(dist))
-            ordem[i] = np.argmin(dist)
-        return ordem   
+    
     # Prunning: Reduced-Error
     def _re(self,target, # Target names
                 preds, # Predicts na training data
                 data, # training data
                 cutPoint): # ratio of the total number of models to cut off
+        prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
+
+        ordem = {}
+
+        C = []
+        for w in range(len(preds)):
+            c = 0
+            for x in range(data.shape[0]):
+                c = c + preds[w][x] - target[x]
+            C.append(c)
+
+        for i in range(prunedN):
+            # (1)
+            S = []
+            for w in range(len(preds)):
+                s = 0
+                for j in range(len(preds)):
+                    if j not in ordem:
+                        s = s + C[w] + C[j]
+                s = pow(i,-1 * s)
+                S.append(s)
+
+            valor  = max(S) * 2
+            for w in ordem.values():
+                S[w] = valor
+            ordem[i] = np.argmin(S)
+        return ordem
+
 
     def DESIP(self, data, target, bagging):
         M = bagging.n_estimators
