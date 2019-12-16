@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-import math as m
+import math
 import joblib
 import warnings
 from sklearn.base import BaseEstimator
@@ -28,6 +28,7 @@ from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
 from deslib.des.knora_e import KNORAE
 from deslib.dcs.ola import OLA
+from DESIP.DESIP import DESIP
 
 class autoBaggingRegressor(BaseEstimator):
 
@@ -45,14 +46,14 @@ class autoBaggingRegressor(BaseEstimator):
                                     'Decision Tree (max_depth=2)': 2,
                                     'Decision Tree (max_depth=3)': 3,
                                     'Decision Tree (max_depth=4)': 4}
-        self.grid = ParameterGrid({"n_estimators": [50, 100, 200],
+        self.grid = ParameterGrid({"n_estimators": [50, 100],
                                    "bootstrap": [True],
-                                   "bootstrap_features" : [True],
+                                   "bootstrap_features" : [False],
                                    "max_samples": [1.0],
                                    "max_features": [1.0]})
-        self.pruning = ParameterGrid({'pruning_method' : [1],
+        self.pruning = ParameterGrid({'pruning_method' : [0,1],
                                       'pruning_cp': [0.5]})
-        self.DStechique = ParameterGrid({ 'ds' : [0]})
+        self.DStechique = ParameterGrid({ 'ds' : [0,1]})
     
     def fit(self,
             datasets,                # Lista com datasets
@@ -69,10 +70,10 @@ class autoBaggingRegressor(BaseEstimator):
                 print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
                 print("________________________________________________________________________")# Tratar do Dataset
-                print(dataset.head())
-                dataset.fillna((-999), inplace=True)
+                
                 # Drop Categorial features sklearn não aceita
                 # dataset = pd.to_numeric(dataset)
+                
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
                         if type(dataset[f]) != pd.core.series.Series:
@@ -81,12 +82,12 @@ class autoBaggingRegressor(BaseEstimator):
                             dataset[f] = pd.to_numeric(dataset[f], errors='coerce')
                 
                 # MetaFeatures
-                dataset = dataset.dropna(axis=1, how='all')
-                dataset.fillna((-999), inplace=True)
                 meta_features_estematic = self._metafeatures(
                     dataset.copy(), target, self.meta_functions, self.post_processing_steps)
-                # Dividir o dataset em exemplos e os targets
+                dataset = dataset.dropna(axis=1, how='all')
+                dataset = dataset.dropna(axis=0)
                 print(dataset.head())
+                # Dividir o dataset em exemplos e os targets
                 simpleImputer = SimpleImputer()
                 X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
@@ -129,33 +130,17 @@ class autoBaggingRegressor(BaseEstimator):
                                     print("----------------------------")
                                 
                                 # Dynamic Select
-                                if DS['ds'] == -1:
-                                    print("Waiting for KNORAE")
+                                if DS['ds'] == 1:
+                                    print("Waiting for DESIP")
                                     print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                    print("Antes -> ",bagging_workflow.predict(X_test))
-
-                                    bagging_workflow = KNORAE(bagging_workflow, k=3)
+                                    
+                                    bagging_workflow = DESIP(bagging_workflow)
                                     bagging_workflow.fit(X_train,y_train)
 
-                                    print("Depois -> ",bagging_workflow.predict(X_test))
-                                    print(y_test)
                                     print("RANK AFTER -> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
                                     print("----------------------------")
-                                else:
-                                    if DS['ds'] == 1:
-                                        print("Waiting for OLA")
-                                        print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                        print("Antes -> ",bagging_workflow.predict(X_test))
-
-                                        bagging_workflow = OLA(bagging_workflow, k=3)
-                                        bagging_workflow.fit(X_train,y_train)
-
-                                        print("Depois -> ",bagging_workflow.predict(X_test))
-                                        print("RANK AFTER -> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                        print("----------------------------")
-                                predictions = bagging_workflow.predict(X_test)
+                                # Avaliar Bagging
                                 Rank = mean_squared_error(y_test, bagging_workflow.predict(X_test))
-
                                 print("Rank --> ", Rank)
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
@@ -239,7 +224,7 @@ class autoBaggingRegressor(BaseEstimator):
                                 features.append(meta_features)
                                 meta_features = pd.DataFrame(features)
                                 score = self.meta_model.predict(np.array(meta_features))
-                                if score > BestScore:
+                                if score < BestScore:
                                     BestScore=score
                                     best_base_estimator = base_estimator
                                     RecommendedBagging = {}
@@ -261,12 +246,9 @@ class autoBaggingRegressor(BaseEstimator):
             else:
                 pruning_method_str = 'None'
             if ds > 0.5:
-                ds_str = 'KNORAE'
+                ds_str = 'DESIP'
             else:
-                if ds < -0.5:
-                    ds_str = 'OLA'
-                else:
-                    ds_str = 'None'
+                ds_str = 'None'
             
             print("Recommended Bagging workflow: ")
             print("\tNumber of models: ", n_estimators)
@@ -313,13 +295,11 @@ class autoBaggingRegressor(BaseEstimator):
                     estimators.append(bagging_workflow.estimators_[i])
                 bagging_workflow.estimators_ = estimators
                     
-            if ds == -1:
-                bagging_workflow = KNORAE(bagging_workflow)
-                bagging_workflow.fit(X_train,y_train)
-
             if ds == 1:
-                bagging_workflow = OLA(bagging_workflow)
-                bagging_workflow.fit(X_train,y_train)
+                #bagging_workflow = KNORAE(bagging_workflow)
+                #bagging_workflow.fit(X_train,y_train)
+                print("TO - DO")
+
             return bagging_workflow
         else:
             print("Erro, não é um problema de Regressão")
@@ -408,15 +388,17 @@ class autoBaggingRegressor(BaseEstimator):
                 preds, # Predicts na training data
                 data, # training data
                 cutPoint): # ratio of the total number of models to cut off
-        prunedN = m.ceil((len(preds) - (len(preds) * cutPoint)))
+        prunedN = math.ceil((len(preds) - (len(preds) * cutPoint)))
 
         ordem = {}
+        N = data.shape[0]
+        M = len(preds)
 
         C = []
-        for w in range(len(preds)):
+        for m in range(M):
             c = 0
-            for x in range(data.shape[0]):
-                c = c + preds[w][x] - target[x]
+            for n in range(N):
+                c = c + preds[m][n] - target[n]
             C.append(c)
 
         for i in range(prunedN):
@@ -426,7 +408,8 @@ class autoBaggingRegressor(BaseEstimator):
                 s = 0
                 for j in range(len(preds)):
                     if j not in ordem:
-                        s = s + C[w] + C[j]
+                        s = s + C[w]
+                s = s + C[j]
                 s = pow(i,-1 * s)
                 S.append(s)
 
@@ -435,19 +418,9 @@ class autoBaggingRegressor(BaseEstimator):
                 S[w] = valor
             ordem[i] = np.argmin(S)
         return ordem
-
-
-    def DESIP(self, data, target, bagging):
-        M = bagging.n_estimators
-        
-        for n in range(data.shape[0]):
-            S = []
-            C = []
-            for m in range(M):
-                C[m] = bagging.estimators_[n] - target[n]
-            
-            for u in range(M):
-                min = 10.000e+300
-                for k in range(M):
-                    for s in S:
-                        z = -1
+        # Prunning: Orderer Aggregation
+        def _oa(self,target, # Target names
+                preds, # Predicts na training data
+                data, # training data
+                cutPoint): # ratio of the total number of models to cut off
+            prunedN = math.ceil((len(preds) - (len(preds) * cutPoint)))
