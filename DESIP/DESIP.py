@@ -17,16 +17,8 @@ class DESIP(BaseEstimator):
         target = y
         data = X_train
         A = []
-        ordem = {}
-        
         N = data.shape[0]
         M = len(preds)
-        
-        # for m in range(M):
-        #     c = 0
-        #     for n in range(N):
-        #         c = c + preds[m][n] - target[n]
-        #     C.append(c)
         for n in range(N):
             S = []
             C = []
@@ -54,16 +46,12 @@ class DESIP(BaseEstimator):
         N = len(self.A[0])
         G = []
         F = X_test.shape[1]
-        #print(X_train)
         for n in range(N):
             E = []
             for f in range(F):
                 E.append(X_train[f] - X_test[f])
             G.append(sum(E))
         bestEnsemble = np.argmin(G)
-        #print("BEST ENSEMBLE INDEX ->",bestEnsemble)
-        #print("ENSEMBLE -> ",self.A[bestEnsemble])
-
         estimators = []
         for i in self.A[bestEnsemble]:
             estimators.append(self.base_estimators[i])

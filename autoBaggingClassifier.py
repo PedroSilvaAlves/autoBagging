@@ -179,6 +179,7 @@ class autoBaggingClassifier(BaseEstimator):
         self.meta_target = np.array(y_meta)
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
+        pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Classifier.csv')
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:

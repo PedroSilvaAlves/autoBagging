@@ -46,13 +46,13 @@ class autoBaggingRegressor(BaseEstimator):
                                     'Decision Tree (max_depth=2)': 2,
                                     'Decision Tree (max_depth=3)': 3,
                                     'Decision Tree (max_depth=4)': 4}
-        self.grid = ParameterGrid({"n_estimators": [50, 100],
+        self.grid = ParameterGrid({"n_estimators": [50, 100,200],
                                    "bootstrap": [True],
                                    "bootstrap_features" : [False],
                                    "max_samples": [1.0],
                                    "max_features": [1.0]})
         self.pruning = ParameterGrid({'pruning_method' : [0,1],
-                                      'pruning_cp': [0.5]})
+                                      'pruning_cp': [0.25,0.5,0.75]})
         self.DStechique = ParameterGrid({ 'ds' : [0,1]})
     
     def fit(self,
@@ -164,7 +164,7 @@ class autoBaggingRegressor(BaseEstimator):
         self.meta_target = np.array(y_meta)
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Regressor.csv')
-        self.meta_target.to_csv('./metadata/Meta_Target_Regressor.csv')
+        pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Regressor.csv')
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
@@ -418,9 +418,10 @@ class autoBaggingRegressor(BaseEstimator):
                 S[w] = valor
             ordem[i] = np.argmin(S)
         return ordem
-        # Prunning: Orderer Aggregation
-        def _oa(self,target, # Target names
-                preds, # Predicts na training data
-                data, # training data
-                cutPoint): # ratio of the total number of models to cut off
-            prunedN = math.ceil((len(preds) - (len(preds) * cutPoint)))
+    # Prunning: Orderer Aggregation
+    def _oa(self,target, # Target names
+            preds, # Predicts na training data
+            data, # training data
+            cutPoint): # ratio of the total number of models to cut off
+        prunedN = math.ceil((len(preds) - (len(preds) * cutPoint)))
+        print(prunedN)
