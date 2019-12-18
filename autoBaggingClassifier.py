@@ -54,12 +54,11 @@ class autoBaggingClassifier(BaseEstimator):
                                    "max_features": [1.0]})
         self.pruning = ParameterGrid({'pruning_method' : [-1,0,1],
                                       'pruning_cp': [0.25,0.5,0.75]})
-        self.DStechique = ParameterGrid({ 'ds' : [-1,0,1]})
+        self.DStechique = ParameterGrid({ 'ds' : [-1,0]})
 
     def fit(self,
-            datasets,                # Lista com datasets
-            target_names):           # Nome dos targets de todas os datasets
-            
+            datasets,      # Lista com datasets
+            target_names): # Nome dos targets de todas os datasets
         # Por cada file abrir o csv e tirar para um array de DataFrames
         x_meta = []     # Vai conter todas as Meta-features, uma linha um exemplo de um algoritmo com um certo tipo de parametros
         y_meta = []     # Vai conter o Meta-Target, em cada linha têm a avaliação de 1-n de cada algoritmo
@@ -70,7 +69,6 @@ class autoBaggingClassifier(BaseEstimator):
                 ndataset= ndataset + 1
                 print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
-                print("________________________________________________________________________") # Tratar do Dataset
                 # Drop Categorial features sklearn não aceita
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
@@ -89,7 +87,7 @@ class autoBaggingClassifier(BaseEstimator):
                 
                 y_train = y_train.reset_index(drop=True)
                 y_test = y_test.reset_index(drop=True)
-                # Criar base-models
+                # Criar e Treina base-models
                 for params in self.grid:  # Combinações de Parametros
                     for DS in self.DStechique:
                         for pruning in self.pruning:
@@ -100,15 +98,11 @@ class autoBaggingClassifier(BaseEstimator):
                                                                         random_state=0,
                                                                         **params)
                                 # Treinar o modelo
-                                print("\n\n")
-                                print("Dataset nº",ndataset,"\n",params,base_estimator)
                                 bagging_workflow.fit(X_train, y_train)
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
-                                # PRUNING MODLS
+                                # Pruning Mothods
                                 if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
-                                    print("Waiting for BB")
-                                    print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                     # Criar predicts para todos os base-model
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                         predictions.append(estimator.predict(X_train[:, features]))
@@ -118,12 +112,8 @@ class autoBaggingClassifier(BaseEstimator):
                                     for i in bb_index.values():
                                         estimators.append(bagging_workflow.estimators_[i])
                                     bagging_workflow.estimators_ = estimators
-                                    print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    print("----------------------------")
                                 else:
                                     if pruning['pruning_method'] == -1 and pruning['pruning_cp'] != 0:
-                                        print("Waiting for MDSQ")
-                                        print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                         # Criar predicts para todos os base-model
                                         for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                             predictions.append(estimator.predict(X_train[:, features]))
@@ -133,28 +123,17 @@ class autoBaggingClassifier(BaseEstimator):
                                         for i in mdsq_index.values():
                                             estimators.append(bagging_workflow.estimators_[i])
                                         bagging_workflow.estimators_ = estimators
-                                        print("RANK AFTER-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                        print("----------------------------")
                                 # Dynamic Select
                                 if DS['ds'] == -1:
-                                    print("Waiting for KNORAE")
-                                    print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                     bagging_workflow = KNORAE(bagging_workflow, k=3)
                                     bagging_workflow.fit(X_train,y_train)
-                                    print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                    print("----------------------------")
                                 else:
                                     if DS['ds'] == 1:
-                                        print("Waiting for OLA")
-                                        print("RANK BEFORE-> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
                                         bagging_workflow = OLA(bagging_workflow, k=3)
                                         bagging_workflow.fit(X_train,y_train)
-                                        print("RANK AFTER -> ", cohen_kappa_score(y_test, bagging_workflow.predict(X_test)))
-                                        print("----------------------------")
                                 predictions = bagging_workflow.predict(X_test)
                                 Rank = cohen_kappa_score(y_test, bagging_workflow.predict(X_test))
 
-                                print("Rank --> ", Rank)
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
                                 meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
@@ -165,15 +144,15 @@ class autoBaggingClassifier(BaseEstimator):
                                 meta_features['pruning_cp'] = pruning['pruning_cp']
                                 meta_features['ds'] = DS['ds']
                                 meta_features['Algorithm'] = self.estimators_switcher[base_estimator]
-                                #array_rank = [] # Este array vai contem o target deste algoritmo
-                                #array_rank.append(float(Rank))  # Adicina o dos algoritmos
                                 # Este array é o meta target do score do algoritmo
                                 y_meta.append(float(Rank))
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
+                pd.DataFrame(x_meta).to_csv("./metadata/MetaData_backup.csv")
+                pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_backup.csv")
 
                                 
-
+        print("________________________________________________________________________") # Tratar do Dataset
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
         self.meta_target = np.array(y_meta)
@@ -203,8 +182,42 @@ class autoBaggingClassifier(BaseEstimator):
                                         n_estimators=100)
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
+        self.is_fitted = True
         return self
 
+    def load_fit(self, meta_data, meta_target):
+        # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
+        self.meta_data = pd.DataFrame(meta_data)
+        self.meta_target = meta_target
+        meta_target = meta_target[:,1]
+        # Guardar Meta Data num ficheiro .CSV
+        self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
+        pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Classifier.csv')
+        self.mata_data = self.meta_data.drop(self.meta_data.columns[0], axis=1,inplace=True)
+        print("Meta-Data Created.")
+        # Tratar dos dados para entrar no XGBOOST
+        for f in self.meta_data.columns:
+            if self.meta_data[f].dtype == 'object':
+                lbl = LabelEncoder()
+                lbl.fit(list(self.meta_data[f].values))
+                self.meta_data[f] = lbl.transform(
+                    list(self.meta_data[f].values))
+
+        self.meta_data.fillna((-999), inplace=True)
+        self.meta_data = np.array(self.meta_data)
+        self.meta_data = self.meta_data.astype(float)
+        # Criar o Meta Model XGBOOST
+        self.meta_model = xgb.XGBRegressor(objective="reg:squarederror",
+                                        colsample_bytree=0.3,
+                                        learning_rate=0.1,
+                                        max_depth=5,
+                                        alpha=10,
+                                        n_estimators=100)
+        # Aplicar Learning algorithm
+        self.meta_model.fit(self.meta_data, self.meta_target)
+        self.is_fitted = True
+
+        return self
     def predict(self, dataset, target):
         if self._validateDataset(dataset, target):
             for f in dataset.columns:
@@ -309,7 +322,6 @@ class autoBaggingClassifier(BaseEstimator):
                 for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                     predictions.append(estimator.predict(X_train[:, features]))
                 bb_index= self._bb(y_train, predictions, X_train, pruning_cp)
-                # Pruning the bagging_workflow
                 estimators = []
                 for i in bb_index.values():
                     estimators.append(bagging_workflow.estimators_[i])
@@ -320,7 +332,6 @@ class autoBaggingClassifier(BaseEstimator):
                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                         predictions.append(estimator.predict(X_train[:, features]))
                     mdsq_index= self._mdsq(y_train, predictions, X_train, pruning_cp)
-                    # Pruning the bagging_workflow
                     estimators = []
                     for i in mdsq_index.values():
                         estimators.append(bagging_workflow.estimators_[i])
@@ -354,6 +365,14 @@ class autoBaggingClassifier(BaseEstimator):
         meta_features['Number of Features'] = dataset.shape[1]
         meta_features['Number of Classes'] = dataset[target].unique().shape[0]
         meta_features_allnames = [
+        'Features.Entropy.Mean',
+        'Features.Entropy.StandardDeviation',
+        'Features.Entropy.Skew',
+        'Features.Entropy.Kurtosis',
+        'Features.MutualInformation.Mean',
+        'Features.MutualInformation.StandardDeviation',
+        'Features.MutualInformation.Skew',
+        'Features.MutualInformation.Kurtosis',
         'Features.SpearmanCorrelation.Mean',
         'Features.SpearmanCorrelation.StandardDeviation',
         'Features.SpearmanCorrelation.Skew',
@@ -378,18 +397,13 @@ class autoBaggingClassifier(BaseEstimator):
         'Features.Kurtosis.StandardDeviation',
         'Features.Kurtosis.Skew',
         'Features.Kurtosis.Kurtosis',
-        'Features.Entropy.Mean',
-        'Features.Entropy.StandardDeviation',
-        'Features.Entropy.Skew',
-        'Features.Entropy.Kurtosis',
-        'Features.MutualInformation.Mean',
-        'Features.MutualInformation.StandardDeviation',
-        'Features.MutualInformation.Skew',
-        'Features.MutualInformation.Kurtosis',
         'FeaturesLabels.MutualInformation.Mean',
         'FeaturesLabels.MutualInformation.StandardDeviation',
         'FeaturesLabels.MutualInformation.Skew',
         'FeaturesLabels.MutualInformation.Kurtosis',
+        'Number of Examples',
+        'Number of Features',
+        'Number of Classes',
         'bootstrap',
         'bootstrap_features',
         'n_estimators',
