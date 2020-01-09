@@ -11,7 +11,23 @@ autoBaggingRegression: Cria um modelo ensemble Bagging recomendado a um certo ti
 Example:
 
 .. code-block:: bash
+  
+  
+  post_processing_steps = [Mean(),
+                         StandardDeviation(),
+                         Skew(),
+                         Kurtosis()]
 
+
+  meta_functions = [Entropy(),
+                  MutualInformation(),
+                  SpearmanCorrelation(),
+                  basic_meta_functions.Mean(),
+                  basic_meta_functions.StandardDeviation(),
+                  basic_meta_functions.Skew(),
+                  basic_meta_functions.Kurtosis()]
+                  
+                  
   autoBagging = autoBaggingRegressor(meta_functions,post_processing_steps)
-  autoBagging.fit(FileNameDatasets, TargetNames)
+  autoBagging.fit(Datasets, TargetNames)
   RecommendedBagging = autoBagging.predict(Dataset,TargetName)
