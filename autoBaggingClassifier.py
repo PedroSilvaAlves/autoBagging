@@ -87,7 +87,7 @@ class autoBaggingClassifier(BaseEstimator):
                 
                 y_train = y_train.reset_index(drop=True)
                 y_test = y_test.reset_index(drop=True)
-                # Criar e Treina base-models
+                # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     for DS in self.DStechique:
                         for pruning in self.pruning:
@@ -98,10 +98,12 @@ class autoBaggingClassifier(BaseEstimator):
                                                                         random_state=0,
                                                                         **params)
                                 # Treinar o modelo
+                                print("\n\n")
+                                print("Dataset nº",ndataset,"\n",params,base_estimator)
                                 bagging_workflow.fit(X_train, y_train)
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
-                                # Pruning Mothods
+                                # PRUNING METHODS
                                 if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
                                     # Criar predicts para todos os base-model
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
@@ -148,8 +150,8 @@ class autoBaggingClassifier(BaseEstimator):
                                 y_meta.append(float(Rank))
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
-                pd.DataFrame(x_meta).to_csv("./metadata/MetaData_backup.csv")
-                pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_backup.csv")
+                pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Classifier_backup.csv")
+                pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Classifier_backup.csv")
 
                                 
         print("________________________________________________________________________") # Tratar do Dataset

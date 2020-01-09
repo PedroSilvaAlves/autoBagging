@@ -113,7 +113,7 @@ class autoBaggingRegressor(BaseEstimator):
                                 bagging_workflow.fit(X_train, y_train)
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
-                                # PRUNING MODLS
+                                # PRUNING METHODS
                                 if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
                                     print("Waiting for RE")
                                     print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
@@ -140,6 +140,7 @@ class autoBaggingRegressor(BaseEstimator):
                                     print("RANK AFTER -> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
                                     print("----------------------------")
                                 # Avaliar Bagging
+                                
                                 Rank = mean_squared_error(y_test, bagging_workflow.predict(X_test))
                                 print("Rank --> ", Rank)
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
@@ -158,6 +159,8 @@ class autoBaggingRegressor(BaseEstimator):
                                 y_meta.append(float(Rank))
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
+                pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Regressor_backup.csv")
+                pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Regressor_backup.csv")
 
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
@@ -189,6 +192,42 @@ class autoBaggingRegressor(BaseEstimator):
 
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
+        self.is_fitted = True
+        return self
+    
+    def load_fit(self, meta_data, meta_target):
+        # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
+        self.meta_data = pd.DataFrame(meta_data)
+        self.meta_target = meta_target
+        meta_target = meta_target[:,1]
+        # Guardar Meta Data num ficheiro .CSV
+        self.meta_data.to_csv('./metadata/Meta_Data_Regressor.csv')
+        pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Regressor.csv')
+        print("Meta-Data Created.")
+        # Tratar dos dados para entrar no XGBOOST
+        for f in self.meta_data.columns:
+            if self.meta_data[f].dtype == 'object':
+                lbl = LabelEncoder()
+                lbl.fit(list(self.meta_data[f].values))
+                self.meta_data[f] = lbl.transform(
+                    list(self.meta_data[f].values))
+
+        self.meta_data.fillna((-999), inplace=True)
+        self.meta_data = np.array(self.meta_data)
+        self.meta_data = self.meta_data.astype(float)
+
+        print("Constructing Meta-Model:")
+        # Criar o Meta Model XGBOOST
+        self.meta_model = xgb.XGBRegressor(objective="reg:squarederror",
+                                        colsample_bytree=0.3,
+                                        learning_rate=0.1,
+                                        max_depth=6,
+                                        alpha=1,
+                                        n_estimators=100)
+
+        # Aplicar Learning algorithm
+        self.meta_model.fit(self.meta_data, self.meta_target)
+        self.is_fitted = True
         return self
 
     def predict(self, dataset, target):
