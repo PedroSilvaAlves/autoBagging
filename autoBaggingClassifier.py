@@ -17,9 +17,9 @@ from sklearn.dummy import DummyClassifier
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.model_selection import ParameterGrid
 from sklearn.model_selection import KFold
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score,cross_validate
 from sklearn.impute import SimpleImputer
-from sklearn.metrics import cohen_kappa_score
+from sklearn.metrics import cohen_kappa_score, make_scorer
 from sklearn.model_selection import train_test_split
 from metafeatures.core.object_analyzer import analyze_pd_dataframe
 from metafeatures.meta_functions.entropy import Entropy
@@ -42,19 +42,19 @@ class autoBaggingClassifier(BaseEstimator):
         self.base_estimators = {'Decision Tree (max_depth=1)': DecisionTreeClassifier(max_depth=1, random_state=0),
                                 'Decision Tree (max_depth=2)': DecisionTreeClassifier(max_depth=2, random_state=0),
                                 'Decision Tree (max_depth=3)': DecisionTreeClassifier(max_depth=3, random_state=0),
-                                'Decision Tree (max_depth=4)': DecisionTreeClassifier(max_depth=4, random_state=0)}
+                                'Decision Tree (max_depth=None)': DecisionTreeClassifier( random_state=0)}
         self.estimators_switcher = {'Decision Tree (max_depth=1)': 1,
                                     'Decision Tree (max_depth=2)': 2,
                                     'Decision Tree (max_depth=3)': 3,
-                                    'Decision Tree (max_depth=4)': 4}
+                                    'Decision Tree (max_depth=None)': 4}
         self.grid = ParameterGrid({"n_estimators" : [50,100,200],
                                    "bootstrap" : [True],
                                    "bootstrap_features" : [False],
                                    "max_samples" : [1.0],
                                    "max_features": [1.0]})
-        self.pruning = ParameterGrid({'pruning_method' : [-1,0,1],
+        self.pruning = ParameterGrid({'pruning_method' : [0],
                                       'pruning_cp': [0.25,0.5,0.75]})
-        self.DStechique = ParameterGrid({ 'ds' : [-1,0]})
+        self.DStechique = ParameterGrid({ 'ds' : [1]})
 
     def fit(self,
             datasets,      # Lista com datasets
@@ -81,12 +81,12 @@ class autoBaggingClassifier(BaseEstimator):
                 simpleImputer = SimpleImputer()
                 X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
-                X_train, X_test, y_train, y_test = train_test_split(X, y,
+                X_train, X_dsel, y_train, y_dsel = train_test_split(X, y,
                                                     test_size=0.25,
                                                     random_state=0,shuffle=True)
                 
                 y_train = y_train.reset_index(drop=True)
-                y_test = y_test.reset_index(drop=True)
+                y_dsel = y_dsel.reset_index(drop=True)
                 # Criar base-models
                 for params in self.grid:  # Combinações de Parametros
                     for DS in self.DStechique:
@@ -95,12 +95,16 @@ class autoBaggingClassifier(BaseEstimator):
                                 meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
                                 # Criar modelo
                                 bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
-                                                                        random_state=0,
+                                                                        random_state=0, n_jobs= -1,
                                                                         **params)
                                 # Treinar o modelo
                                 print("\n\n")
                                 print("Dataset nº",ndataset,"\n",params,base_estimator)
-                                bagging_workflow.fit(X_train, y_train)
+                                k_fold = KFold(n_splits=3, random_state=0)
+                                cross_vals = cross_validate(bagging_workflow,X_train,y_train,cv=k_fold, scoring=make_scorer(cohen_kappa_score), return_estimator=True)
+                                print("Scores: ", cross_vals['test_score'])
+                                bagging_workflow = cross_vals['estimator'][np.argmax(cross_vals['test_score'])]
+
                                 # Criar landmark do baggingworkflow atual
                                 predictions = []
                                 # PRUNING METHODS
@@ -126,16 +130,20 @@ class autoBaggingClassifier(BaseEstimator):
                                             estimators.append(bagging_workflow.estimators_[i])
                                         bagging_workflow.estimators_ = estimators
                                 # Dynamic Select
+                                k_fold_cohen_kappa = KFold(n_splits=4, random_state=0)
                                 if DS['ds'] == -1:
-                                    bagging_workflow = KNORAE(bagging_workflow, k=3)
-                                    bagging_workflow.fit(X_train,y_train)
+                                    bagging_workflow = KNORAE(bagging_workflow.estimators_, random_state=0)
+                                    Rank = cross_val_score(bagging_workflow,X=X_dsel,y=y_dsel,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
+                                    print("Rank --> ", Rank)
                                 else:
                                     if DS['ds'] == 1:
-                                        bagging_workflow = OLA(bagging_workflow, k=3)
-                                        bagging_workflow.fit(X_train,y_train)
-                                predictions = bagging_workflow.predict(X_test)
-                                Rank = cohen_kappa_score(y_test, bagging_workflow.predict(X_test))
-
+                                        bagging_workflow = OLA(bagging_workflow.estimators_,random_state=0)
+                                        Rank = cross_val_score(bagging_workflow,X=X_dsel,y=y_dsel,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
+                                        print("Rank --> ", Rank)
+                                    else:
+                                        k_fold_cohen_kappa = KFold(n_splits=4,random_state=0)
+                                        Rank = cross_val_score(bagging_workflow,X=X_train,y=y_train,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
+                                        print("Rank --> ", Rank)
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
                                 meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
@@ -181,7 +189,7 @@ class autoBaggingClassifier(BaseEstimator):
                                         learning_rate=0.1,
                                         max_depth=5,
                                         alpha=10,
-                                        n_estimators=100)
+                                        n_estimators=100, n_jobs=-1)
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
         self.is_fitted = True
@@ -214,7 +222,7 @@ class autoBaggingClassifier(BaseEstimator):
                                         learning_rate=0.1,
                                         max_depth=5,
                                         alpha=10,
-                                        n_estimators=100)
+                                        n_estimators=100, n_jobs=-1)
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
         self.is_fitted = True
@@ -307,7 +315,7 @@ class autoBaggingClassifier(BaseEstimator):
                     bootstrap_features=bootstrap_features,
                     max_samples=max_samples,
                     max_features=max_features,
-                    random_state=0,
+                    random_state=0, n_jobs=-1
                     )
 
             

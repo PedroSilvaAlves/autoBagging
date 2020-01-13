@@ -68,7 +68,6 @@ post_processing_steps = [Mean(),
 
 
 meta_functions = [Entropy(),
-                 #PearsonCorrelation(),
                   MutualInformation(),
                   SpearmanCorrelation(),
                   basic_meta_functions.Mean(),
