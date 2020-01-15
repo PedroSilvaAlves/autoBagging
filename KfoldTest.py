@@ -1,4 +1,5 @@
 import numpy as np
+from sklearn.ensemble import BaggingClassifier
 from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score,cross_validate
@@ -25,8 +26,9 @@ X_train, X_dsel, y_train, y_dsel = train_test_split(X_train, y_train,
 # Initialize the DS techniques. DS methods can be initialized without
 # specifying a single input parameter. In this example, we just pass the random
 # state in order to always have the same result.
-kne = KNORAE(random_state=rng)
-meta = METADES(random_state=rng)
+bagging_workflow = BaggingClassifier(n_estimators=50)
+kne = KNORAE(bagging_workflow,random_state=rng)
+#meta = METADES(random_state=rng)
 k_fold = KFold(n_splits=5)
 scores = cross_val_score(kne, X_dsel,y_dsel,cv=k_fold, scoring=make_scorer(cohen_kappa_score))
 

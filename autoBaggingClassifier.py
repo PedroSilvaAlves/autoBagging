@@ -54,7 +54,7 @@ class autoBaggingClassifier(BaseEstimator):
                                    "max_features": [1.0]})
         self.pruning = ParameterGrid({'pruning_method' : [0],
                                       'pruning_cp': [0.25,0.5,0.75]})
-        self.DStechique = ParameterGrid({ 'ds' : [1]})
+        self.DStechique = ParameterGrid({ 'ds' : [-1]})
 
     def fit(self,
             datasets,      # Lista com datasets
@@ -112,6 +112,7 @@ class autoBaggingClassifier(BaseEstimator):
                                     # Criar predicts para todos os base-model
                                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                         predictions.append(estimator.predict(X_train[:, features]))
+                                    # Calcular os index dos base-model que ficaram no bagging
                                     bb_index= self._bb(y_train, predictions, X_train, pruning['pruning_cp'])
                                     # Pruning the bagging_workflow
                                     estimators = []
@@ -123,6 +124,7 @@ class autoBaggingClassifier(BaseEstimator):
                                         # Criar predicts para todos os base-model
                                         for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                             predictions.append(estimator.predict(X_train[:, features]))
+                                        # Calcular os index dos base-model que ficaram no bagging
                                         mdsq_index= self._mdsq(y_train, predictions, X_train, pruning['pruning_cp'])
                                         # Pruning the bagging_workflow
                                         estimators = []
@@ -132,12 +134,14 @@ class autoBaggingClassifier(BaseEstimator):
                                 # Dynamic Select
                                 k_fold_cohen_kappa = KFold(n_splits=4, random_state=0)
                                 if DS['ds'] == -1:
-                                    bagging_workflow = KNORAE(bagging_workflow.estimators_, random_state=0)
+                                    bagging_workflow = KNORAE(bagging_workflow, random_state=0)
+                                    print(bagging_workflow)
                                     Rank = cross_val_score(bagging_workflow,X=X_dsel,y=y_dsel,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
                                     print("Rank --> ", Rank)
                                 else:
                                     if DS['ds'] == 1:
-                                        bagging_workflow = OLA(bagging_workflow.estimators_,random_state=0)
+                                        bagging_workflow = OLA(bagging_workflow,random_state=0)
+                                        print(bagging_workflow)
                                         Rank = cross_val_score(bagging_workflow,X=X_dsel,y=y_dsel,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
                                         print("Rank --> ", Rank)
                                     else:
