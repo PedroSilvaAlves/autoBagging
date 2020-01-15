@@ -4,6 +4,7 @@ import xgboost as xgb
 import math as m
 import joblib
 import warnings
+import time
 from sklearn.utils.multiclass import type_of_target
 from sklearn.utils import column_or_1d
 from sklearn.base import BaseEstimator
@@ -49,9 +50,9 @@ class autoBaggingClassifier(BaseEstimator):
                                     'Decision Tree (max_depth=3)': 3,
                                     'Decision Tree (max_depth=None)': 4}
         self.bagging_grid = ParameterGrid({"n_estimators" : [50,100,200]})
-        self.pruning = ParameterGrid({'pruning_method' : [0],
+        self.pruning = ParameterGrid({'pruning_method' : [-1,0,1],
                                       'pruning_cp': [0.25,0.5,0.75]})
-        self.DStechique = ParameterGrid({ 'ds' : [-1]})
+        self.DStechique = ParameterGrid({ 'ds' : [-1,0,1]})
 
     def fit(self,
             datasets,      # Lista com datasets
@@ -61,11 +62,15 @@ class autoBaggingClassifier(BaseEstimator):
         y_meta = []     # Vai conter o Meta-Target, em cada linha têm a avaliação de 1-n de cada algoritmo
                         # + parametros do bagging workflow
         ndataset = 0
+        t = time.time()
         for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para criar Meta Data
             if self._validateDataset(dataset, target):
                 ndataset= ndataset + 1
                 print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
+                print("Shape:", np.shape(dataset), " (examples, features)")
+                #Time
+                t = time.time()
                 # Drop Categorial features sklearn não aceita
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
@@ -92,6 +97,8 @@ class autoBaggingClassifier(BaseEstimator):
                                 for train_index, test_index in kf.split(X):
                                     X_train, X_test = X[train_index], X[test_index]
                                     y_train, y_test = y[train_index], y[test_index]
+                                    y_train = y_train.reset_index(drop=True)
+                                    y_test = y_test.reset_index(drop=True)
                                     # Criar modelo
                                     bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
                                                                             random_state=0, n_jobs= -1,
@@ -149,6 +156,7 @@ class autoBaggingClassifier(BaseEstimator):
                                 y_meta.append(float(mean(Ranks)))
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
+                print('Elapsed: %.2f seconds' % (time.time() - t))                
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Classifier_backup.csv")
         
