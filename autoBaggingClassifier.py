@@ -32,6 +32,7 @@ from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
 from deslib.des.knora_e import KNORAE
 from deslib.dcs.ola import OLA
+from statistics import mean
 
 
 class autoBaggingClassifier(BaseEstimator):
@@ -49,7 +50,7 @@ class autoBaggingClassifier(BaseEstimator):
                                     'Decision Tree (max_depth=None)': 4}
         self.bagging_grid = ParameterGrid({"n_estimators" : [50,100,200]})
         self.pruning = ParameterGrid({'pruning_method' : [0],
-                                      'pruning_cp': [0.25,0.5,0.74]})
+                                      'pruning_cp': [0.25,0.5,0.75]})
         self.DStechique = ParameterGrid({ 'ds' : [-1]})
 
     def fit(self,
@@ -77,89 +78,66 @@ class autoBaggingClassifier(BaseEstimator):
                 simpleImputer = SimpleImputer()
                 X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
-                X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                    test_size=0.25,
-                                                    random_state=0,shuffle=True)
 
-                y_test = y_test.reset_index(drop=True)
-                X_test, X_dsel, y_test, y_dsel = train_test_split(X_test, y_test,
-                                                    test_size=0.5,
-                                                    random_state=0,shuffle=True)
-                y_train = y_train.reset_index(drop=True)
-                y_dsel = y_dsel.reset_index(drop=True)
-                y_test = y_test.reset_index(drop=True)
                 # Criar base-models
                 for params in self.bagging_grid:  # Combinações de Parametros
                     for DS in self.DStechique:
                         for pruning in self.pruning:
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
                                 meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
-                                # Criar modelo
-                                bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
-                                                                        random_state=0, n_jobs= -1,
-                                                                        **params)
-                                # Treinar o modelo
-                                print("\n\n")
-                                print("Dataset nº",ndataset,"\nBagging:",base_estimator,params, DS, pruning)
-                                k_fold = KFold(n_splits=3, random_state=0)
-                                cross_vals = cross_validate(bagging_workflow,X_train,y_train,cv=k_fold, scoring=make_scorer(cohen_kappa_score), return_estimator=True)
-                                print("\tBagging CrossVal Rank --> ", cross_vals['test_score'].mean())
-                                bagging_workflow = cross_vals['estimator'][np.argmax(cross_vals['test_score'])]
-                                print('\tBagging Cohen Kappa Score: ', cohen_kappa_score(bagging_workflow.predict(X_test),y_test))
-
-                                # Criar landmark do baggingworkflow atual
-                                predictions = []
-                                # PRUNING METHODS
-                                if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
-                                    # Criar predicts para todos os base-model
-                                    for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
-                                        predictions.append(estimator.predict(X_train[:, features]))
-                                    # Calcular os index dos base-model que ficaram no bagging
-                                    bb_index= self._bb(y_train, predictions, X_train, pruning['pruning_cp'])
-                                    # Pruning the bagging_workflow
-                                    estimators = []
-                                    for i in bb_index.values():
-                                        estimators.append(bagging_workflow.estimators_[i])
-                                    bagging_workflow.estimators_ = estimators
-                                else:
-                                    if pruning['pruning_method'] == -1 and pruning['pruning_cp'] != 0:
+                                
+                                # Cross Validation
+                                Ranks = []
+                                kf = KFold(n_splits=4)
+                                for train_index, test_index in kf.split(X):
+                                    X_train, X_test = X[train_index], X[test_index]
+                                    y_train, y_test = y[train_index], y[test_index]
+                                    # Criar modelo
+                                    bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
+                                                                            random_state=0, n_jobs= -1,
+                                                                            **params)
+                                    # Treinar o modelo
+                                    bagging_workflow.fit(X_train,y_train)
+                                    # Criar landmark do baggingworkflow atual
+                                    predictions = []
+                                    # PRUNING METHODS
+                                    if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
                                         # Criar predicts para todos os base-model
                                         for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                             predictions.append(estimator.predict(X_train[:, features]))
                                         # Calcular os index dos base-model que ficaram no bagging
-                                        mdsq_index= self._mdsq(y_train, predictions, X_train, pruning['pruning_cp'])
+                                        bb_index= self._bb(y_train, predictions, X_train, pruning['pruning_cp'])
                                         # Pruning the bagging_workflow
                                         estimators = []
-                                        for i in mdsq_index.values():
+                                        for i in bb_index.values():
                                             estimators.append(bagging_workflow.estimators_[i])
                                         bagging_workflow.estimators_ = estimators
-                                
-                                print('\tPruning Cohen Kappa Score: ', cohen_kappa_score(bagging_workflow.predict(X_test),y_test))
-                                
-                                # Dynamic Select
-                                k_fold_cohen_kappa = KFold(n_splits=3, random_state=0)
-                                if DS['ds'] == -1:
-                                    bagging_workflow = KNORAE(bagging_workflow, random_state=0)
-                                    bagging_workflow.fit(X_train,y_train)
-                                    Rank = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
-                                    print('\tKNORAE Cohen Kappa Score: ', Rank)
-                                    #Rank = cross_val_score(bagging_workflow.pool_classifiers,X=X_train,y=y_train,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
-                                    #print("\tKNORAE  CrossVal Rank --> ", Rank)
-                                else:
-                                    if DS['ds'] == 1:
-                                        bagging_workflow = OLA(bagging_workflow,random_state=0)
-                                        bagging_workflow.fit(X_train,y_train)
-                                        Rank = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
-                                        print('\tOLA Cohen Kappa Score: ', Rank)
-                                        #Rank = cross_val_score(bagging_workflow.pool_classifiers,X=X_train,y=y_train,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
-                                        #print("\tOLA     CrossVal Rank --> ", Rank)
-
                                     else:
-                                        Rank = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
-                                        print('\tNone Cohen Kappa Score: ', Rank)
-                                        #Rank = cross_val_score(bagging_workflow,X=X_train,y=y_train,cv=k_fold_cohen_kappa,scoring=make_scorer(cohen_kappa_score)).mean()
-                                        #print("\tNone    CrossVal Rank --> ", Rank)
-
+                                        if pruning['pruning_method'] == -1 and pruning['pruning_cp'] != 0:
+                                            # Criar predicts para todos os base-model
+                                            for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                                                predictions.append(estimator.predict(X_train[:, features]))
+                                            # Calcular os index dos base-model que ficaram no bagging
+                                            mdsq_index= self._mdsq(y_train, predictions, X_train, pruning['pruning_cp'])
+                                            # Pruning the bagging_workflow
+                                            estimators = []
+                                            for i in mdsq_index.values():
+                                                estimators.append(bagging_workflow.estimators_[i])
+                                            bagging_workflow.estimators_ = estimators
+                                    
+                                    # Dynamic Select
+                                    if DS['ds'] == -1:
+                                        bagging_workflow = KNORAE(bagging_workflow, random_state=0)
+                                        bagging_workflow.fit(X_train,y_train)
+                                        Rank_fold = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
+                                    else:
+                                        if DS['ds'] == 1:
+                                            bagging_workflow = OLA(bagging_workflow,random_state=0)
+                                            bagging_workflow.fit(X_train,y_train)
+                                            Rank_fold = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
+                                        else:
+                                            Rank_fold = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
+                                    Ranks.append(Rank_fold)
 
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['n_estimators'] = params['n_estimators']
@@ -168,13 +146,12 @@ class autoBaggingClassifier(BaseEstimator):
                                 meta_features['ds'] = DS['ds']
                                 meta_features['Algorithm'] = self.estimators_switcher[base_estimator]
                                 # Este array é o meta target do score do algoritmo
-                                y_meta.append(float(Rank))
+                                y_meta.append(float(mean(Ranks)))
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
-                pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Classifier_backup.csv")
-                pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Classifier_backup.csv")
-
-                                
+                pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")
+                pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Classifier_backup.csv")
+        
         print("________________________________________________________________________") # Tratar do Dataset
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
@@ -182,7 +159,7 @@ class autoBaggingClassifier(BaseEstimator):
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
         pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Classifier.csv')
-        print("Meta-Data Created.")
+        print("Meta-Data Created and Saved.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
             if self.meta_data[f].dtype == 'object':
@@ -324,6 +301,9 @@ class autoBaggingClassifier(BaseEstimator):
             X_train = X
             y_train = y
             # Treinar o modelo
+            k_fold = KFold(n_splits=4, random_state=0)
+            cross_vals = cross_validate(bagging_workflow,X_train,y_train,cv=k_fold, scoring=make_scorer(cohen_kappa_score), return_estimator=True)
+            bagging_workflow = cross_vals['estimator'][np.argmax(cross_vals['test_score'])]
             bagging_workflow.fit(X_train, y_train)
             predictions = []
             if pruning_method == 1 and pruning_cp != 0:
