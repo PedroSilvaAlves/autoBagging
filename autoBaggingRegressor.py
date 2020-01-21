@@ -4,6 +4,7 @@ import xgboost as xgb
 import math
 import joblib
 import warnings
+import time
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
@@ -26,9 +27,8 @@ from metafeatures.meta_functions.spearman_correlation import SpearmanCorrelation
 from metafeatures.post_processing_functions.basic import Mean, StandardDeviation, Skew, Kurtosis
 from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
-from deslib.des.knora_e import KNORAE
-from deslib.dcs.ola import OLA
-from DESIP.DESIP import DESIP
+from statistics import mean
+#from DESIP.DESIP import DESIP
 
 class autoBaggingRegressor(BaseEstimator):
 
@@ -40,20 +40,16 @@ class autoBaggingRegressor(BaseEstimator):
         self.base_estimators = {'Decision Tree (max_depth=1)': DecisionTreeRegressor(max_depth=1, random_state=0),
                                 'Decision Tree (max_depth=2)': DecisionTreeRegressor(max_depth=2, random_state=0),
                                 'Decision Tree (max_depth=3)': DecisionTreeRegressor(max_depth=3, random_state=0),
-                                'Decision Tree (max_depth=4)': DecisionTreeRegressor(max_depth=4, random_state=0),
+                                'Decision Tree (max_depth=None)': DecisionTreeRegressor(random_state=0),
                                 }
         self.estimators_switcher = {'Decision Tree (max_depth=1)': 1,
                                     'Decision Tree (max_depth=2)': 2,
                                     'Decision Tree (max_depth=3)': 3,
-                                    'Decision Tree (max_depth=4)': 4}
-        self.grid = ParameterGrid({"n_estimators": [50, 100,200],
-                                   "bootstrap": [True],
-                                   "bootstrap_features" : [False],
-                                   "max_samples": [1.0],
-                                   "max_features": [1.0]})
+                                    'Decision Tree (max_depth=None)': 4}
+        self.bagging_grid = ParameterGrid({"n_estimators": [50, 100,200]})
         self.pruning = ParameterGrid({'pruning_method' : [0,1],
                                       'pruning_cp': [0.25,0.5,0.75]})
-        self.DStechique = ParameterGrid({ 'ds' : [0,1]})
+        self.DStechique = ParameterGrid({ 'ds' : [0]})
     
     def fit(self,
             datasets,                # Lista com datasets
@@ -66,11 +62,12 @@ class autoBaggingRegressor(BaseEstimator):
         ndataset = 0
         for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para treino do meta-model
            if self._validateDataset(dataset, target):
-                ndataset= ndataset+1
+                ndataset= ndataset + 1
                 print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
-                print("________________________________________________________________________")# Tratar do Dataset
-                
+                print("Shape:", np.shape(dataset), " (examples, features)")
+                #Time
+                t = time.time()
                 # Drop Categorial features sklearn não aceita
                 # dataset = pd.to_numeric(dataset)
                 
@@ -83,92 +80,97 @@ class autoBaggingRegressor(BaseEstimator):
                 
                 # MetaFeatures
                 meta_features_estematic = self._metafeatures(
-                    dataset.copy(), target, self.meta_functions, self.post_processing_steps)
-                dataset = dataset.dropna(axis=1, how='all')
-                dataset = dataset.dropna(axis=0)
-                print(dataset.head())
+                    dataset, target, self.meta_functions, self.post_processing_steps)
+
+                dataset.replace([np.inf, -np.inf], np.nan)
+                dataset = dataset.dropna(axis=1,how ='all') # Drop features with all NaN
+                dataset = dataset.dropna(axis = 0,how = 'any') # Drop examples with Nan values
+                dataset = dataset.reset_index(drop=True)
+                
                 # Dividir o dataset em exemplos e os targets
                 simpleImputer = SimpleImputer()
                 X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
-                X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                    test_size=0.25,
-                                                    random_state=0,shuffle=True)
                 
-                y_train = y_train.reset_index(drop=True)
-                y_test = y_test.reset_index(drop=True)
                 # Criar base-models
-                for params in self.grid:  # Combinações de Parametros
+                for params in self.bagging_grid:  # Combinações de Parametros
                     for DS in self.DStechique:
                         for pruning in self.pruning:
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
                                 meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
-                                # Criar modelo
-                                bagging_workflow = BaggingRegressor(base_estimator=self.base_estimators[base_estimator],
-                                                                        random_state=0,
-                                                                        **params)
-                                 # Treinar o modelo
-                                print("\n\n")
-                                print("Dataset nº",ndataset,"\n",params,base_estimator)
-                                bagging_workflow.fit(X_train, y_train)
-                                # Criar landmark do baggingworkflow atual
-                                predictions = []
-                                # PRUNING METHODS
-                                if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
-                                    print("Waiting for RE")
-                                    print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                    # Criar predicts para todos os base-model
-                                    for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
-                                        predictions.append(estimator.predict(X_train[:, features]))
-                                    re_index= self._re(y_train, predictions, X_train, pruning['pruning_cp'])
-                                    # Pruning the bagging_workflow
-                                    estimators = []
-                                    for i in re_index.values():
-                                        estimators.append(bagging_workflow.estimators_[i])
-                                    bagging_workflow.estimators_ = estimators
-                                    print("RANK AFTER-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                    print("----------------------------")
                                 
-                                # Dynamic Select
-                                if DS['ds'] == 1:
-                                    print("Waiting for DESIP")
-                                    print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                    
-                                    bagging_workflow = DESIP(bagging_workflow)
-                                    bagging_workflow.fit(X_train,y_train)
+                                # Cross Validation
+                                Ranks = []
+                                kf = KFold(n_splits=4)
+                                for train_index, test_index in kf.split(X):
+                                    X_train, X_test = X[train_index], X[test_index]
+                                    y_train, y_test = y[train_index], y[test_index]
+                                    y_train = y_train.reset_index(drop=True)
+                                    y_test = y_test.reset_index(drop=True)
+                                    # Criar modelo
+                                    bagging_workflow = BaggingRegressor(base_estimator=self.base_estimators[base_estimator],
+                                                                            random_state=0, n_jobs=-1,
+                                                                            **params)
+                                    # Treinar o modelo
+                                    bagging_workflow.fit(X_train, y_train)
 
-                                    print("RANK AFTER -> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                    print("----------------------------")
-                                # Avaliar Bagging
-                                
-                                Rank = mean_squared_error(y_test, bagging_workflow.predict(X_test))
-                                print("Rank --> ", Rank)
+                                    # Criar landmark do baggingworkflow atual
+                                    predictions = []
+                                    # PRUNING METHODS
+                                    if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
+                                        #print("Waiting for RE")
+                                        #print("RANK BEFORE: ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
+                                        # Criar predicts para todos os base-model
+                                        for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
+                                            predictions.append(estimator.predict(X_train[:, features]))
+                                        re_index= self._re(y_train, predictions, X_train, pruning['pruning_cp'])
+                                        # Pruning the bagging_workflow
+                                        estimators = []
+                                        for i in re_index.values():
+                                            estimators.append(bagging_workflow.estimators_[i])
+                                        bagging_workflow.estimators_ = estimators
+                                        #print("RANK AFTER: ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
+                                        #print("----------------------------")
+                                    
+                                    # Dynamic Select
+                                    if DS['ds'] == 1:
+                                        print(" TO - DO ")
+                                         #print("Waiting for DESIP")
+                                         #print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
+                                        
+                                         #bagging_workflow = DESIP(bagging_workflow)
+                                         #bagging_workflow.fit(X_train,y_train)
+
+                                         #print("RANK AFTER -> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
+                                         #print("----------------------------")
+                                    else:
+
+                                        Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
+                                        #print("Rank FOLD: ",Rank_fold)
+                                    Ranks.append(Rank_fold)
+                                print("Rank KFOLD Final: ", float(mean(Ranks)))
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
-                                meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
-                                meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
                                 meta_features['n_estimators'] = params['n_estimators']
-                                meta_features['max_samples'] = params['max_samples']
-                                meta_features['max_features'] = params['max_features']
                                 meta_features['pruning_method'] = pruning['pruning_method']
                                 meta_features['pruning_cp'] = pruning['pruning_cp']
                                 meta_features['ds'] = DS['ds']
                                 meta_features['Algorithm'] = self.estimators_switcher[base_estimator]
-                                #array_rank = [] # Este array vai contem o target deste algoritmo
-                                #array_rank.append(float(Rank))  # Adicina o dos algoritmos
                                 # Este array é o meta target do score do algoritmo
-                                y_meta.append(float(Rank))
+                                y_meta.append(float(mean(Ranks)))
+                                
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
+                print('Elapsed: %.2f seconds' % (time.time() - t))  
                 pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Regressor_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Regressor_backup.csv")
-
+        print("________________________________________________________________________")
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
         self.meta_target = np.array(y_meta)
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Regressor.csv')
         pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Regressor.csv')
-        print("Meta-Data Created.")
+        print("Meta-Data Created and Saved.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
             if self.meta_data[f].dtype == 'object':
@@ -188,7 +190,8 @@ class autoBaggingRegressor(BaseEstimator):
                                         learning_rate=0.1,
                                         max_depth=6,
                                         alpha=1,
-                                        n_estimators=100)
+                                        n_estimators=100,
+                                        n_jobs=-1)
 
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
@@ -203,6 +206,7 @@ class autoBaggingRegressor(BaseEstimator):
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Regressor.csv')
         pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Regressor.csv')
+        self.meta_data = self.meta_data.drop(self.meta_data.columns[0], axis=1,inplace=True)
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
@@ -223,7 +227,8 @@ class autoBaggingRegressor(BaseEstimator):
                                         learning_rate=0.1,
                                         max_depth=6,
                                         alpha=1,
-                                        n_estimators=100)
+                                        n_estimators=100,
+                                        n_jobs=-1)
 
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
@@ -244,16 +249,12 @@ class autoBaggingRegressor(BaseEstimator):
             BestScore = -1
             score = 0
             RecommendedBagging = {}
-            for params in self.grid:  # Combinações de Parametros
+            for params in self.bagging_grid:  # Combinações de Parametros
                     for DS in self.DStechique:
                         for pruning in self.pruning:
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
                                 meta_features = meta_features_estematic.copy()
-                                meta_features['bootstrap'] = np.multiply(params['bootstrap'], 1)
-                                meta_features['bootstrap_features'] = np.multiply(params['bootstrap_features'], 1)
                                 meta_features['n_estimators'] = params['n_estimators']
-                                meta_features['max_samples'] = params['max_samples']
-                                meta_features['max_features'] = params['max_features']
                                 meta_features['pruning_method'] = pruning['pruning_method']
                                 meta_features['pruning_cp'] = pruning['pruning_cp']
                                 meta_features['ds'] = DS['ds']
@@ -270,10 +271,6 @@ class autoBaggingRegressor(BaseEstimator):
                                     RecommendedBagging = meta_features_dic.copy()
             # Prints e construção do Bagging previsto
             n_estimators = int(RecommendedBagging['n_estimators'])
-            bootstrap = bool(RecommendedBagging['bootstrap'])
-            bootstrap_features = bool(RecommendedBagging['bootstrap_features'])
-            max_samples = float(RecommendedBagging['max_samples'])
-            max_features = float(RecommendedBagging['max_features'])
             pruning_method = int(RecommendedBagging['pruning_method'])
             pruning_cp = int(RecommendedBagging['pruning_cp']/100)
             ds = int(RecommendedBagging['ds'])
@@ -291,10 +288,6 @@ class autoBaggingRegressor(BaseEstimator):
             
             print("Recommended Bagging workflow: ")
             print("\tNumber of models: ", n_estimators)
-            print("\tBootstrap: ", bootstrap)
-            print("\tBootstrap_features: ",bootstrap_features)
-            print("\tMax_samples: ", max_samples)
-            print("\tMax_features: ", max_features)
             if pruning_method != 0:
                 print("\tPruning Method: ", pruning_method_str)
                 print("\tPruning CutPoint: ", pruning_cp*100)
@@ -307,11 +300,8 @@ class autoBaggingRegressor(BaseEstimator):
             bagging_workflow = BaggingRegressor(
                     base_estimator= self.base_estimators[base_estimator],
                     n_estimators=n_estimators,
-                    bootstrap=bootstrap,
-                    bootstrap_features=bootstrap_features,
-                    max_samples=max_samples,
-                    max_features=max_features,
                     random_state=0,
+                    n_jobs=-1
                     )
 
             
@@ -338,7 +328,6 @@ class autoBaggingRegressor(BaseEstimator):
                 #bagging_workflow = KNORAE(bagging_workflow)
                 #bagging_workflow.fit(X_train,y_train)
                 print("TO - DO")
-
             return bagging_workflow
         else:
             print("Erro, não é um problema de Regressão")
@@ -396,11 +385,10 @@ class autoBaggingRegressor(BaseEstimator):
         'FeaturesLabels.MutualInformation.StandardDeviation',
         'FeaturesLabels.MutualInformation.Skew',
         'FeaturesLabels.MutualInformation.Kurtosis',
-        'bootstrap',
-        'bootstrap_features',
+        'Number of Examples',
+        'Number of Features',
+        'Number of Classes',
         'n_estimators',
-        'max_samples',
-        'max_features',
         'pruning_method',
         'pruning_cp',
         'ds',

@@ -160,7 +160,7 @@ class autoBaggingClassifier(BaseEstimator):
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Classifier_backup.csv")
         
-        print("________________________________________________________________________") # Tratar do Dataset
+        print("________________________________________________________________________")
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
         self.meta_target = np.array(y_meta)
@@ -187,7 +187,8 @@ class autoBaggingClassifier(BaseEstimator):
                                         learning_rate=0.1,
                                         max_depth=5,
                                         alpha=10,
-                                        n_estimators=100, n_jobs=-1)
+                                        n_estimators=100,
+                                        n_jobs=-1)
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
         self.is_fitted = True
@@ -201,7 +202,7 @@ class autoBaggingClassifier(BaseEstimator):
         # Guardar Meta Data num ficheiro .CSV
         self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
         pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Classifier.csv')
-        self.mata_data = self.meta_data.drop(self.meta_data.columns[0], axis=1,inplace=True)
+        self.meta_data = self.meta_data.drop(self.meta_data.columns[0], axis=1,inplace=True)
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
         for f in self.meta_data.columns:
@@ -220,7 +221,8 @@ class autoBaggingClassifier(BaseEstimator):
                                         learning_rate=0.1,
                                         max_depth=5,
                                         alpha=10,
-                                        n_estimators=100, n_jobs=-1)
+                                        n_estimators=100,
+                                        n_jobs=-1)
         # Aplicar Learning algorithm
         self.meta_model.fit(self.meta_data, self.meta_target)
         self.is_fitted = True
@@ -299,7 +301,7 @@ class autoBaggingClassifier(BaseEstimator):
                     base_estimator= self.base_estimators[base_estimator],
                     n_estimators=n_estimators,
                     random_state=0,
-                     n_jobs=-1
+                    n_jobs=-1
                     )
 
             
