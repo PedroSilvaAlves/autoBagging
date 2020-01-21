@@ -68,9 +68,9 @@ class autoBaggingRegressor(BaseEstimator):
                 print("Shape:", np.shape(dataset), " (examples, features)")
                 #Time
                 t = time.time()
-                # Drop Categorial features sklearn não aceita
-                # dataset = pd.to_numeric(dataset)
                 
+                
+                # Drop Categorial features, DecisionTree do sklearn não aceitam
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
                         if type(dataset[f]) != pd.core.series.Series:
@@ -81,10 +81,13 @@ class autoBaggingRegressor(BaseEstimator):
                 # MetaFeatures
                 meta_features_estematic = self._metafeatures(
                     dataset, target, self.meta_functions, self.post_processing_steps)
-
+                
+                # Convert +/- Inf to NaN
                 dataset.replace([np.inf, -np.inf], np.nan)
-                dataset = dataset.dropna(axis=1,how ='all') # Drop features with all NaN
-                dataset = dataset.dropna(axis = 0,how = 'any') # Drop examples with Nan values
+                # Drop Columns with all NaN values
+                dataset = dataset.dropna(axis=1,how ='all')
+                # Drop examples with some Nan Values
+                dataset = dataset.dropna(axis = 0,how = 'any') 
                 dataset = dataset.reset_index(drop=True)
                 
                 # Dividir o dataset em exemplos e os targets
@@ -99,14 +102,16 @@ class autoBaggingRegressor(BaseEstimator):
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
                                 meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
                                 
-                                # Cross Validation
+                                # Cross Validation 4 Folds
                                 Ranks = []
                                 kf = KFold(n_splits=4)
                                 for train_index, test_index in kf.split(X):
+                                    # Separar set do Fold atual
                                     X_train, X_test = X[train_index], X[test_index]
                                     y_train, y_test = y[train_index], y[test_index]
                                     y_train = y_train.reset_index(drop=True)
                                     y_test = y_test.reset_index(drop=True)
+                                    
                                     # Criar modelo
                                     bagging_workflow = BaggingRegressor(base_estimator=self.base_estimators[base_estimator],
                                                                             random_state=0, n_jobs=-1,
@@ -114,12 +119,9 @@ class autoBaggingRegressor(BaseEstimator):
                                     # Treinar o modelo
                                     bagging_workflow.fit(X_train, y_train)
 
-                                    # Criar landmark do baggingworkflow atual
                                     predictions = []
                                     # PRUNING METHODS
                                     if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
-                                        #print("Waiting for RE")
-                                        #print("RANK BEFORE: ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
                                         # Criar predicts para todos os base-model
                                         for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                                             predictions.append(estimator.predict(X_train[:, features]))
@@ -129,26 +131,15 @@ class autoBaggingRegressor(BaseEstimator):
                                         for i in re_index.values():
                                             estimators.append(bagging_workflow.estimators_[i])
                                         bagging_workflow.estimators_ = estimators
-                                        #print("RANK AFTER: ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                        #print("----------------------------")
                                     
                                     # Dynamic Select
                                     if DS['ds'] == 1:
                                         print(" TO - DO ")
-                                         #print("Waiting for DESIP")
-                                         #print("RANK BEFORE-> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                        
-                                         #bagging_workflow = DESIP(bagging_workflow)
-                                         #bagging_workflow.fit(X_train,y_train)
-
-                                         #print("RANK AFTER -> ", mean_squared_error(y_test, bagging_workflow.predict(X_test)))
-                                         #print("----------------------------")
                                     else:
-
+                                        # Criar landmark do baggingworkflow atual
                                         Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
-                                        #print("Rank FOLD: ",Rank_fold)
                                     Ranks.append(Rank_fold)
-                                print("Rank KFOLD Final: ", float(mean(Ranks)))
+                                print("Rank Bagging(MSE[0 = perfect]): ", float(mean(Ranks)))
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['n_estimators'] = params['n_estimators']
                                 meta_features['pruning_method'] = pruning['pruning_method']
@@ -452,3 +443,4 @@ class autoBaggingRegressor(BaseEstimator):
             cutPoint): # ratio of the total number of models to cut off
         prunedN = math.ceil((len(preds) - (len(preds) * cutPoint)))
         print(prunedN)
+        print(" TO - DO ")

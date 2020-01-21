@@ -91,21 +91,23 @@ class autoBaggingClassifier(BaseEstimator):
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
                                 meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
                                 
-                                # Cross Validation
+                                # Cross Validation 4 Folds
                                 Ranks = []
                                 kf = KFold(n_splits=4)
                                 for train_index, test_index in kf.split(X):
+                                    # Separar set do Fold atual
                                     X_train, X_test = X[train_index], X[test_index]
                                     y_train, y_test = y[train_index], y[test_index]
                                     y_train = y_train.reset_index(drop=True)
                                     y_test = y_test.reset_index(drop=True)
+                                    
                                     # Criar modelo
                                     bagging_workflow = BaggingClassifier(base_estimator=self.base_estimators[base_estimator],
                                                                             random_state=0, n_jobs= -1,
                                                                             **params)
                                     # Treinar o modelo
                                     bagging_workflow.fit(X_train,y_train)
-                                    # Criar landmark do baggingworkflow atual
+                                    
                                     predictions = []
                                     # PRUNING METHODS
                                     if pruning['pruning_method'] == 1 and pruning['pruning_cp'] != 0:
@@ -144,8 +146,9 @@ class autoBaggingClassifier(BaseEstimator):
                                             Rank_fold = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
                                         else:
                                             Rank_fold = cohen_kappa_score(bagging_workflow.predict(X_test),y_test)
+                                    # Criar landmark do baggingworkflow atual
                                     Ranks.append(Rank_fold)
-
+                                print("Rank Bagging(Cohen Kappa[1 = perfect]): ", float(mean(Ranks)))
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['n_estimators'] = params['n_estimators']
                                 meta_features['pruning_method'] = pruning['pruning_method']
