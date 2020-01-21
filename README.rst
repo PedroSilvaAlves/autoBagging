@@ -2,7 +2,7 @@ autoBagging Python
 ------------------------------
 ML (Machine Learning) & Mtl (MetaLearning)
 
-Um Sistema autoML que é capaz de avaliar modelos de Bagging para um dataset.
+Um Sistema autoML que é capaz de avaliar e treinar modelos "Bagging" para um dataset.
 
 autoBaggingClassifier: Cria um modelo ensemble Bagging recomendado a um certo tipo de problema de Classificação
 
@@ -17,8 +17,6 @@ Example:
                          StandardDeviation(),
                          Skew(),
                          Kurtosis()]
-
-
   meta_functions = [Entropy(),
                   MutualInformation(),
                   SpearmanCorrelation(),
