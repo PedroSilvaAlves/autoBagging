@@ -39,15 +39,15 @@ openml.config.apikey = '2754bfd67b4aa8a5854f00d3fc4bdd89'
 TargetNames = []
 Datasets = []
 # Open ML Valid Datasets
-index = [551,556,557,561,562,674,659,661,663,665,703,710,712,684,686,687,688,690,
-        692,697,1035,1027,1028,1029,1030,301,573,1089,1097,1098,1099,1072,1070,
+index = [551,556,557,561,674,659,661,663,665,703,710,712,684,687,688,690,
+        692,697,1035,1027,1028,1029,1030,301,1089,1097,1098,1099,1072,1070,
         1091,1093,544,549,1228,456,482,483,485,506,509,510,521,523,524,526,527,
         530,533,535,536,539,540,511,513,515,516,518,519,520,491,492,494,497,498,
-        191,194,195,197,199,200,203,204,205,207,224,227,230,231,211,213,427,287,
-        294,298,299,42176,42178,42111,42112,42113,42110,42165,42166,41943,40505,
+        191,194,195,199,200,203,204,205,207,224,230,231,211,213,427,
+        294,299,42176,42111,42112,42113,42110,42165,42166,41943,40505,
         41514,41515,41516,41517,41518,41519,41021,41968,41969]
 GoodDatasets = []
-print("Starting Getting datasets(", len(index),")")
+print("Get Datasets({})".format(len(index)))
 # Load and Validate Datasets
 for i in index:
     try:
@@ -60,16 +60,16 @@ for i in index:
         if y_type in ['binary', 'multiclass', 'multiclass-multioutput',
                       'multilabel-indicator', 'multilabel-sequences']:
             if dtype in (np.object,):
-                print("Dataset Válido = ",y_type)
                 Datasets.append(X)
                 TargetNames.append(target)
                 GoodDatasets.append(i)
+                print("OpenML Dataset[{}]: {} - {} (examples, features)".format(i,y_type,np.shape(X)))
             elif dtype in (np.int, np.int32, np.int64, np.float, np.float32,
                         np.float64, int, float):
-                print("Dataset Válido = ",y_type)
                 Datasets.append(X)
                 TargetNames.append(target)
                 GoodDatasets.append(i)
+                print("OpenML Dataset[{}]: {} - {} (examples, features)".format(i,y_type,np.shape(X)))
         else:     
             print("Invalid!")      
         
@@ -79,6 +79,8 @@ for i in index:
 with open("ValidDatasets.txt", "w") as txt_file:
     for id in GoodDatasets:
         txt_file.write(str(id) + ",")
+
+print("Total amount of Datasets:",len(index))
 #####################
 
 post_processing_steps = [Mean(),
@@ -103,15 +105,16 @@ meta_functions = [Entropy(),
 print("\n\n\n***************** AutoBagging Classifier *****************")
 model = autoBaggingClassifier(meta_functions=meta_functions,
                               post_processing_steps=post_processing_steps)
-# IN CASE THE PROGRAM EXITS WE CAN USE BACK UP DATA
-#
-#meta_data = pd.read_csv("./metadata/MetaData_backup.csv")
-#meta_target = pd.read_csv("./metadata/MetaTarget_backup.csv")
-#meta_target = np.array(meta_target)
-#model = model.load_fit(meta_data,meta_target)
-#
-#
+'''
+IN CASE THE PROGRAM FAIL'S WE CAN USE BACK UP DATA
 
+meta_data = pd.read_csv("./metadata/MetaData_backup.csv")
+meta_target = pd.read_csv("./metadata/MetaTarget_backup.csv")
+meta_target = np.array(meta_target)
+model = model.load_fit(meta_data,meta_target)
+'''
+
+print("\nCreate Meta-Data from {} Datasets then Fit Meta-Model".format(len(index)))
 model = model.fit(Datasets, TargetNames)
 joblib.dump(model, "./models/autoBaggingClassifierModel.sav")
 
@@ -141,21 +144,12 @@ bestBagging = model.predict(dataset_train,targetname)
 # Getting Default Bagging
 DefaultBagging = BaggingClassifier(random_state=0)
 DefaultBagging.fit(X_train,y_train)
-print("Verify Bagging algorithm score:")
-#######################################################
-################## Testing Bagging ####################
-#######################################################
 
+#######################################################
+############## Single Testing Bagging #################
+#######################################################
+print("Verify Bagging algorithm score:")
 score = bestBagging.score(X_test,y_test)
 print("Recommended  Bagging --> Score: %0.2f" % score)
 score = DefaultBagging.score(X_test,y_test)
 print("Default Bagging --> Score: %0.2f" % score)
-
-
-## When Cross Validation is compatible with DESLIB + Pruning
-#kfold = KFold(n_splits=10, random_state=0)
-#cv_results = cross_val_score(bestBagging, X, y, cv=kfold, scoring='accuracy')
-#print("Recommended Bagging --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
-#kfold = KFold(n_splits=10, random_state=0)
-#cv_results = cross_val_score(DefaultBagging, X, y, cv=kfold, scoring='accuracy')
-#print("Default Bagging --> Score: %0.2f (+/-) %0.2f)" % (cv_results.mean(), cv_results.std() * 2))
