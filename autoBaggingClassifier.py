@@ -174,7 +174,6 @@ class autoBaggingClassifier(BaseEstimator):
                                 indexBagging = indexBagging + 1
                 sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
                 # Backup Data
-                pd.DataFrame(ndataset).to_csv("./metadata/Last_Dataset_Classifier_backup.csv")                
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Classifier_backup.csv")
         
