@@ -65,6 +65,7 @@ class autoBaggingClassifier(BaseEstimator):
                 print("Dataset nº ", ndataset)
                 print("Shape: {}(examples, features)".format(np.shape(dataset)))
                 # Number of Bagging Workflows
+                indexBagging = 1
                 indexMaxBagging = 0
                 for params in self.bagging_grid:                                # Combinações de Parametros
                     for DS in self.DStechique:                                  # Combinações do Dynamic Selection
@@ -88,7 +89,6 @@ class autoBaggingClassifier(BaseEstimator):
                 simpleImputer = SimpleImputer()
                 X = simpleImputer.fit_transform(dataset.drop(target, axis=1))
                 y = dataset[target]
-                indexBagging = 1
                 # Criar base-models
                 for params in self.bagging_grid:                                # Combinações de Parametros
                     for DS in self.DStechique:                                  # Combinações do Dynamic Selection
@@ -174,7 +174,7 @@ class autoBaggingClassifier(BaseEstimator):
                                 indexBagging = indexBagging + 1
                 sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
                 # Backup Data
-                pd.DataFrame(ndataset).to_csv("./metadata/Last_Dataset_backup.csv")                
+                pd.DataFrame(ndataset).to_csv("./metadata/Last_Dataset_Classifier_backup.csv")                
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Classifier_backup.csv")
         

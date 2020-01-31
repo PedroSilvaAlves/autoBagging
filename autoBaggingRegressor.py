@@ -5,6 +5,7 @@ import math
 import joblib
 import warnings
 import time
+import sys
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
 from sklearn.tree import DecisionTreeRegressor
@@ -65,11 +66,20 @@ class autoBaggingRegressor(BaseEstimator):
                 ndataset= ndataset + 1
                 print("________________________________________________________________________")
                 print("Dataset nº ", ndataset)
-                print("Shape:", np.shape(dataset), " (examples, features)")
+                print("Shape: {}(examples, features)".format(np.shape(dataset)))
+                # Number of Bagging Workflows
+                indexBagging = 1
+                indexMaxBagging = 0
+                for params in self.bagging_grid:                                # Combinações de Parametros
+                    for DS in self.DStechique:                                  # Combinações do Dynamic Selection
+                        for pruning in self.pruning:                            # Combinações dos Pruning Methods
+                            for base_estimator in self.base_estimators:         # Combinação dos algoritmos base
+                                # Skip Useless Combinations
+                                if(self._skipCombination(pruning)):
+                                    continue
+                                indexMaxBagging = indexMaxBagging + 1
                 #Time
                 t = time.time()
-                
-                
                 # Drop Categorial features, DecisionTree do sklearn não aceitam
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
@@ -100,6 +110,10 @@ class autoBaggingRegressor(BaseEstimator):
                     for DS in self.DStechique:
                         for pruning in self.pruning:
                             for base_estimator in self.base_estimators:  # Combinação dos algoritmos base
+                                # Skip Useless Combinations
+                                if(self._skipCombination(pruning)):
+                                    continue
+                                sys.stdout.write('\r'+ "Creating Baggings Workflows... [{}/{}]".format(indexBagging,indexMaxBagging))
                                 meta_features = meta_features_estematic.copy() # Meta-features do dataset só é criado uma vez
                                 
                                 # Cross Validation 4 Folds
@@ -131,7 +145,8 @@ class autoBaggingRegressor(BaseEstimator):
                                         for i in re_index.values():
                                             estimators.append(bagging_workflow.estimators_[i])
                                         bagging_workflow.estimators_ = estimators
-                                    
+                                    else:
+                                        pruning['pruning_cp'] = 0
                                     # Dynamic Select
                                     if DS['ds'] == 1:
                                         print(" TO - DO ")
@@ -139,7 +154,7 @@ class autoBaggingRegressor(BaseEstimator):
                                         # Criar landmark do baggingworkflow atual
                                         Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
                                     Ranks.append(Rank_fold)
-                                print("Rank Bagging(MSE[0 = perfect]): ", float(mean(Ranks)))
+                                #print("Rank Bagging(MSE[0 = perfect]): ", float(mean(Ranks)))
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
                                 meta_features['n_estimators'] = params['n_estimators']
                                 meta_features['pruning_method'] = pruning['pruning_method']
@@ -151,7 +166,10 @@ class autoBaggingRegressor(BaseEstimator):
                                 
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
-                print('Elapsed: %.2f seconds' % (time.time() - t))  
+                                indexBagging = indexBagging + 1
+                sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
+                # Backup Data
+                pd.DataFrame(ndataset).to_csv("./metadata/Last_Dataset_Regressor_backup.csv") 
                 pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Regressor_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Regressor_backup.csv")
         print("________________________________________________________________________")

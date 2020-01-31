@@ -82,6 +82,17 @@ meta_functions = [Entropy(),
 print("\n\n\n***************** AutoBagging Regressor *****************")
 model = autoBaggingRegressor(meta_functions=meta_functions,
                              post_processing_steps=post_processing_steps)
+
+'''
+IN CASE THE PROGRAM FAIL'S WE CAN USE BACK UP DATA
+
+meta_data = pd.read_csv("./metadata/MetaData_backup.csv")
+meta_target = pd.read_csv("./metadata/MetaTarget_backup.csv")
+meta_target = np.array(meta_target)
+model = model.load_fit(meta_data,meta_target)
+'''
+print("\nCreate Meta-Data from {} Datasets then Fit Meta-Model".format(6))
+
 model = model.fit(Datasets, TargetNames)
 joblib.dump(model, "./models/autoBaggingRegressorModel.sav")
 
@@ -111,19 +122,13 @@ bestBagging = model.predict(dataset_train,targetname)
 # Getting Default Bagging
 DefaultBagging = BaggingRegressor(random_state=0)
 DefaultBagging.fit(X_train,y_train)
-print("Verify Bagging algorithm score:")
+
 #######################################################
 ################## Testing Bagging ####################
 #######################################################
+
+print("Verify Bagging algorithm score:")
 score = bestBagging.score(X_test,y_test)
 print("Recommended  Bagging --> Score: %0.2f" % score)
 score = DefaultBagging.score(X_test,y_test)
 print("Default Bagging --> Score: %0.2f" % score)
-
-# kfold = KFold(n_splits=10, random_state=0)
-# cv_results = cross_val_score(bestBagging, X, y, cv=kfold, scoring='neg_mean_squared_error')
-# print("Recommended Bagging --> Score: %0.2f (+/-) %0.2f)" % (abs(cv_results.mean()), cv_results.std() * 2))
-
-# kfold = KFold(n_splits=10, random_state=0)
-# cv_results = cross_val_score(DefaultBagging, X, y, cv=kfold, scoring='neg_mean_squared_error')
-# print("Default Bagging --> Score: %0.2f (+/-) %0.2f)" % (abs(cv_results.mean()), cv_results.std() * 2))
