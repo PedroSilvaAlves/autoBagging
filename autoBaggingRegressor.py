@@ -29,8 +29,8 @@ from metafeatures.post_processing_functions.basic import Mean, StandardDeviation
 from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
 from statistics import mean
-from DESlibRegression.deslib.des.knora_e import KNORAE
-from DESlibRegression.deslib.dcs.ola import OLA
+from deslibautobagging.des.knora_e import KNORAE
+from deslibautobagging.dcs.ola import OLA
 
 #from DESIP.DESIP import DESIP
 
@@ -177,12 +177,11 @@ class autoBaggingRegressor(BaseEstimator):
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
                                 indexBagging = indexBagging + 1
-                                print("\nRank:",Rank_fold)
-                                print("\n")
+                                
                 sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
                 # Backup Data
-                pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Regressor_backup.csv")
-                pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Regressor_backup.csv")
+                pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Regressor_backup.csv")
+                pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Regressor_backup.csv")
         print("________________________________________________________________________")
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
         self.meta_data = pd.DataFrame(x_meta)
