@@ -81,6 +81,15 @@ class autoBaggingClassifier(BaseEstimator):
                 for f in dataset.columns:
                     if dataset[f].dtype == 'object':
                         dataset = dataset.drop(columns=f, axis=1)
+
+                # Convert +/- Inf to NaN
+                dataset.replace([np.inf, -np.inf], np.nan)
+                # Drop Columns with all NaN values
+                dataset = dataset.dropna(axis=1,how ='all')
+                # Drop examples with some Nan Values
+                dataset = dataset.dropna(axis=0,how = 'any') 
+                dataset = dataset.reset_index(drop=True)
+                
                 # MetaFeatures
                 meta_features_estematic = self._metafeatures(
                     dataset, target, self.meta_functions, self.post_processing_steps)
@@ -172,6 +181,7 @@ class autoBaggingClassifier(BaseEstimator):
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
                                 indexBagging = indexBagging + 1
+                sys.stdout.write('\r'+ "                                                ")
                 sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
                 # Backup Data
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")

@@ -35,20 +35,22 @@ from sklearn.utils.multiclass import type_of_target
 #######################################################
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
-openml.config.apikey = '2754bfd67b4aa8a5854f00d3fc4bdd89'
+openml.config.apikey = '819d1d52e9314798feeb0d96fbd45b7f'
 TargetNames = []
 Datasets = []
 # Open ML Valid Datasets
-index = [551,556,557,561,674,659,661,663,665,703,710,712,684,687,688,690,
-        692,697,1035,1027,1028,1029,1030,301,1089,1097,1098,1099,1072,1070,
-        1091,1093,544,549,1228,456,482,483,485,506,509,510,521,523,524,526,527,
-        530,533,535,536,539,540,511,513,515,516,518,519,520,491,492,494,497,498,
-        191,194,195,199,200,203,204,205,207,224,230,231,211,213,427,
-        294,299,42176,42111,42112,42113,42110,42165,42166,41943,40505,
-        41514,41515,41516,41517,41518,41519,41021,41968,41969]
+#index = [551,556,557,561,674,659,661,663,665,703,710,712,684,687,688,690,
+#        692,697,1035,1027,1028,1029,1030,301,1089,1097,1098,1099,1072,1070,
+#        1091,1093,544,549,1228,456,482,483,485,506,509,510,521,523,524,526,527,
+#        530,533,535,536,539,540,511,513,515,516,518,519,520,491,492,494,497,498,
+#        191,194,195,199,200,203,204,205,207,224,230,231,211,213,427,
+#        294,299,42176,42111,42112,42113,42110,42165,41943,40505,
+#        41514,41515,41516,41517,41518,41519,41021,41968,41969]
+index = [555,556,557,561,703,712,686,690,1035,1027,1029,1030,301,1097,1099,549,456,482,506,509,524,533,536,540,513,516,519,520,494,191,194,195,200,203,204,207,224,230,231,213,299,41021,511,41514,41515,41516,41517,41518,41519,42110,42111,42112,42113,42165,42224,1028,41968,41969,41943]
 GoodDatasets = []
 print("Get Datasets({})".format(len(index)))
 # Load and Validate Datasets
+n_dataset=1
 for i in index:
     try:
         dataset = openml.datasets.get_dataset(i)
@@ -63,13 +65,15 @@ for i in index:
                 Datasets.append(X)
                 TargetNames.append(target)
                 GoodDatasets.append(i)
-                print("OpenML Dataset[{}]: {} - {} (examples, features)".format(i,y_type,np.shape(X)))
+                print("OpenML Dataset[{}][{}]: {} - {} (examples, features)".format(n_dataset,i,y_type,np.shape(X)))
+                n_dataset=n_dataset+1
             elif dtype in (np.int, np.int32, np.int64, np.float, np.float32,
                         np.float64, int, float):
                 Datasets.append(X)
                 TargetNames.append(target)
                 GoodDatasets.append(i)
-                print("OpenML Dataset[{}]: {} - {} (examples, features)".format(i,y_type,np.shape(X)))
+                print("OpenML Dataset[{}][{}]: {} - {} (examples, features)".format(n_dataset,i,y_type,np.shape(X)))
+                n_dataset=n_dataset+1
         else:     
             print("Invalid!")      
         
