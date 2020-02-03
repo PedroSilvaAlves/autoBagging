@@ -1,0 +1,10 @@
+*.pyc
+__pycache__
+.ipynb_checkpoints
+
+
+build
+dist
+DESlib.egg-info
+.idea
+.pytest_cache

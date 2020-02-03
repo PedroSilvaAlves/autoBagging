@@ -29,6 +29,9 @@ from metafeatures.post_processing_functions.basic import Mean, StandardDeviation
 from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
 from statistics import mean
+from DESlibRegression.deslib.des.knora_e import KNORAE
+from DESlibRegression.deslib.dcs.ola import OLA
+
 #from DESIP.DESIP import DESIP
 
 class autoBaggingRegressor(BaseEstimator):
@@ -39,18 +42,18 @@ class autoBaggingRegressor(BaseEstimator):
         self.post_processing_steps = post_processing_steps
                            
         self.base_estimators = {'Decision Tree (max_depth=1)': DecisionTreeRegressor(max_depth=1, random_state=0),
-                                'Decision Tree (max_depth=2)': DecisionTreeRegressor(max_depth=2, random_state=0),
-                                'Decision Tree (max_depth=3)': DecisionTreeRegressor(max_depth=3, random_state=0),
+                                #'Decision Tree (max_depth=2)': DecisionTreeRegressor(max_depth=2, random_state=0),
+                                #'Decision Tree (max_depth=3)': DecisionTreeRegressor(max_depth=3, random_state=0),
                                 'Decision Tree (max_depth=None)': DecisionTreeRegressor(random_state=0),
                                 }
         self.estimators_switcher = {'Decision Tree (max_depth=1)': 1,
-                                    'Decision Tree (max_depth=2)': 2,
-                                    'Decision Tree (max_depth=3)': 3,
-                                    'Decision Tree (max_depth=None)': 4}
+                                    #'Decision Tree (max_depth=2)': 2,
+                                    #'Decision Tree (max_depth=3)': 3,
+                                    'Decision Tree (max_depth=None)': 2}
         self.bagging_grid = ParameterGrid({"n_estimators": [50, 100,200]})
         self.pruning = ParameterGrid({'pruning_method' : [0,1],
                                       'pruning_cp': [0.25,0.5,0.75]})
-        self.DStechique = ParameterGrid({ 'ds' : [0]})
+        self.DStechique = ParameterGrid({ 'ds' : [-1,0,1]})
     
     def fit(self,
             datasets,                # Lista com datasets
@@ -128,7 +131,7 @@ class autoBaggingRegressor(BaseEstimator):
                                     
                                     # Criar modelo
                                     bagging_workflow = BaggingRegressor(base_estimator=self.base_estimators[base_estimator],
-                                                                            random_state=0, n_jobs=-1,
+                                                                            random_state=0,
                                                                             **params)
                                     # Treinar o modelo
                                     bagging_workflow.fit(X_train, y_train)
@@ -148,11 +151,18 @@ class autoBaggingRegressor(BaseEstimator):
                                     else:
                                         pruning['pruning_cp'] = 0
                                     # Dynamic Select
-                                    if DS['ds'] == 1:
-                                        print(" TO - DO ")
-                                    else:
-                                        # Criar landmark do baggingworkflow atual
+                                    if DS['ds'] == -1:
+                                        bagging_workflow = KNORAE(bagging_workflow, random_state=0)
+                                        bagging_workflow.fit(X_train,y_train)
                                         Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
+                                    else:
+                                        if DS['ds'] == 1:
+                                            bagging_workflow = OLA(bagging_workflow,random_state=0)
+                                            bagging_workflow.fit(X_train,y_train)
+                                            Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
+                                        else:
+                                            # Criar landmark do baggingworkflow atual
+                                            Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
                                     Ranks.append(Rank_fold)
                                 #print("Rank Bagging(MSE[0 = perfect]): ", float(mean(Ranks)))
                                 # Adicionar ao array de metafeatures, as caracteriticas dos baggings workflows
@@ -167,9 +177,10 @@ class autoBaggingRegressor(BaseEstimator):
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
                                 indexBagging = indexBagging + 1
+                                print("\nRank:",Rank_fold)
+                                print("\n")
                 sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
                 # Backup Data
-                pd.DataFrame(ndataset).to_csv("./metadata/Last_Dataset_Regressor_backup.csv") 
                 pd.DataFrame(x_meta).to_csv("./metadata/MetaData_Regressor_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/MetaTarget_Regressor_backup.csv")
         print("________________________________________________________________________")
@@ -418,7 +429,13 @@ class autoBaggingRegressor(BaseEstimator):
         else:
             print("Não é válido o Dataset")
             return False
-    
+    def _skipCombination(self,pruning):
+        if pruning['pruning_method'] == 0:
+            if pruning['pruning_cp'] == 0.5 or pruning['pruning_cp'] == 0.75:
+                return True
+            else:
+                return False
+
     # Prunning: Reduced-Error
     def _re(self,target, # Target names
                 preds, # Predicts na training data

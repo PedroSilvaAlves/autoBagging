@@ -29,7 +29,6 @@ from metafeatures.post_processing_functions.basic import Mean, StandardDeviation
 from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
 
-
 #######################################################
 ################### MAIN FUNCTION #####################
 #######################################################
@@ -41,8 +40,6 @@ TargetNames = []
 Datasets = []
 ### LOCAL DATASETS ###
 try:
-    
-    
     Datasets.append(pd.read_csv('./datasets_regressor/analcatdata_negotiation.csv'))
     TargetNames.append('Future_business')
     Datasets.append(pd.read_csv('./datasets_regressor/baseball.csv'))
