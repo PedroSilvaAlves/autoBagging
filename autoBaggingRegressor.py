@@ -300,11 +300,11 @@ class autoBaggingRegressor(BaseEstimator):
                 pruning_method_str = 'None'
             if ds > 0.5:
                     ds_str = 'KNORAE'
+            else:
+                if ds < -0.5:
+                    ds_str = 'OLA'
                 else:
-                    if ds < -0.5:
-                        ds_str = 'OLA'
-                    else:
-                        ds_str = 'None'
+                    ds_str = 'None'
                 
             print("Recommended Bagging workflow: ")
             print("\tNumber of models: ", n_estimators)

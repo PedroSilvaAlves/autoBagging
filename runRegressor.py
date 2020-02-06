@@ -28,6 +28,7 @@ from metafeatures.meta_functions.spearman_correlation import SpearmanCorrelation
 from metafeatures.post_processing_functions.basic import Mean, StandardDeviation, Skew, Kurtosis
 from metafeatures.post_processing_functions.basic import NonAggregated
 from metafeatures.core.engine import metafeature_generator
+from sklearn.utils.multiclass import type_of_target
 
 #######################################################
 ################### MAIN FUNCTION #####################
@@ -35,27 +36,62 @@ from metafeatures.core.engine import metafeature_generator
 
 #warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.filterwarnings("ignore")
-openml.config.apikey = '2754bfd67b4aa8a5854f00d3fc4bdd89'
+openml.config.apikey = '819d1d52e9314798feeb0d96fbd45b7f'
 TargetNames = []
 Datasets = []
+
+
+###### OPEN ML #######
+index = [8,189,190,191,193,194,195,199,200,203,204,206,210,211,213,217,222,223,227,228,231,232,491,506,507,511,524,531,541,562,566,578,639,673,703,707,1096,41700,42224]
+GoodDatasets = []
+print("Get Datasets({})".format(len(index)))
+# Load and Validate Datasets
+n_dataset=1
+for i in index:
+    try:
+        dataset = openml.datasets.get_dataset(i)
+        X, y, categorical_indicator, attribute_names = dataset.get_data(dataset_format='dataframe')
+        target = dataset.default_target_attribute
+        dtype = X[target].dtype
+        y_type = type_of_target(X[target])
+        if dtype in (np.int, np.int32, np.int64, np.float, np.float32,
+                    np.float64, int, float):
+            Datasets.append(X)
+            TargetNames.append(target)
+            GoodDatasets.append(i)
+            print("OpenML Dataset[{}][{}]: {} - {} (examples, features)".format(n_dataset,i,y_type,np.shape(X)))
+            n_dataset=n_dataset+1
+        else:     
+            print("Invalid!")      
+    except Exception as e:
+        
+        print("Error ", i, e)
+
+with open("ValidDatasets.txt", "w") as txt_file:
+    for id in GoodDatasets:
+        txt_file.write(str(id) + ",")
+
+print("Total amount of Datasets:",len(GoodDatasets))
+#####################
+
 ### LOCAL DATASETS ###
-try:
-    Datasets.append(pd.read_csv('./datasets_regressor/analcatdata_negotiation.csv'))
-    TargetNames.append('Future_business')
-    Datasets.append(pd.read_csv('./datasets_regressor/baseball.csv'))
-    TargetNames.append('RS')
-    Datasets.append(pd.read_csv('./datasets_regressor/phpRULnTn.csv'))
-    TargetNames.append('oz26')
-    Datasets.append(pd.read_csv('./datasets_regressor/dataset_2193_autoPrice.csv'))
-    TargetNames.append('class')
-    Datasets.append(pd.read_csv('./datasets_regressor/dataset_8_liver-disorders.csv'))
-    TargetNames.append('drinks')
-    Datasets.append(pd.read_csv('./datasets_regressor/cpu_small.csv'))
-    TargetNames.append('usr')
-except FileNotFoundError:
-    print(
-        "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
-    quit()
+# try:
+#     Datasets.append(pd.read_csv('./datasets_regressor/analcatdata_negotiation.csv'))
+#     TargetNames.append('Future_business')
+#     Datasets.append(pd.read_csv('./datasets_regressor/baseball.csv'))
+#     TargetNames.append('RS')
+#     Datasets.append(pd.read_csv('./datasets_regressor/phpRULnTn.csv'))
+#     TargetNames.append('oz26')
+#     Datasets.append(pd.read_csv('./datasets_regressor/dataset_2193_autoPrice.csv'))
+#     TargetNames.append('class')
+#     Datasets.append(pd.read_csv('./datasets_regressor/dataset_8_liver-disorders.csv'))
+#     TargetNames.append('drinks')
+#     Datasets.append(pd.read_csv('./datasets_regressor/cpu_small.csv'))
+#     TargetNames.append('usr')
+# except FileNotFoundError:
+#     print(
+#         "Path do dataset está errado, deve conter uma pasta 'dataset' no path do ficheiro autoBagging")
+#     quit()
 ######################
 
 post_processing_steps = [Mean(),

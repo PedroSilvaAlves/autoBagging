@@ -85,7 +85,7 @@ with open("ValidDatasets.txt", "w") as txt_file:
     for id in GoodDatasets:
         txt_file.write(str(id) + ",")
 
-print("Total amount of Datasets:",len(index))
+print("Total amount of Datasets:",len(GoodDatasets))
 #####################
 
 post_processing_steps = [Mean(),
