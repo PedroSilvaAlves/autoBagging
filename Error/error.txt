@@ -1,31 +1,31 @@
-Dataset nº  89
-Shape: (1794, 9)(examples, features)
+Dataset nº  39
+Shape: (294, 14)(examples, features)
 Traceback (most recent call last):
-  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 2897, in get_loc
-    return self._engine.get_loc(key)
-  File "pandas/_libs/index.pyx", line 107, in pandas._libs.index.IndexEngine.get_loc
-  File "pandas/_libs/index.pyx", line 131, in pandas._libs.index.IndexEngine.get_loc
-  File "pandas/_libs/hashtable_class_helper.pxi", line 1607, in pandas._libs.hashtable.PyObjectHashTable.get_item
-  File "pandas/_libs/hashtable_class_helper.pxi", line 1614, in pandas._libs.hashtable.PyObjectHashTable.get_item
-KeyError: 'bean_type'
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "runClassifier.py", line 118, in <module>
+  File "runClassifier.py", line 122, in <module>
     model = model.fit(Datasets, TargetNames)
-  File "/home/core/Documents/PedroAlves/autoBagging/autoBaggingClassifier.py", line 84, in fit
-    # MetaFeatures
-  File "/home/core/Documents/PedroAlves/autoBagging/autoBaggingClassifier.py", line 384, in _metafeatures
-    meta_features['Number of Classes'] = dataset[target].unique().shape[0]
-  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/frame.py", line 2995, in __getitem__
-    indexer = self.columns.get_loc(key)
-  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 2899, in get_loc
-    return self._engine.get_loc(self._maybe_cast_indexer(key))
-  File "pandas/_libs/index.pyx", line 107, in pandas._libs.index.IndexEngine.get_loc
-  File "pandas/_libs/index.pyx", line 131, in pandas._libs.index.IndexEngine.get_loc
-  File "pandas/_libs/hashtable_class_helper.pxi", line 1607, in pandas._libs.hashtable.PyObjectHashTable.get_item
-  File "pandas/_libs/hashtable_class_helper.pxi", line 1614, in pandas._libs.hashtable.PyObjectHashTable.get_item
-KeyError: 'bean_type'
-(PedroAlves) core@MTS-WKS-27YG1:~/Documents/PedroAlves/autoBagging$ 
+  File "/home/core/Documents/PedroAlves/autoBagging/autoBaggingClassifier.py", line 94, in fit
+    meta_features_estematic = self._metafeatures(
+  File "/home/core/Documents/PedroAlves/autoBagging/autoBaggingClassifier.py", line 381, in _metafeatures
+    metafeatures_values, metafeatures_names = metafeature_generator(
+  File "/home/core/Documents/PedroAlves/autoBagging/metafeatures/core/engine.py", line 6, in metafeature_generator
+    data_numpy, attributes = analyze_pd_dataframe(data, target)
+  File "/home/core/Documents/PedroAlves/autoBagging/metafeatures/core/object_analyzer.py", line 49, in analyze_pd_dataframe
+    dataframe = _replace_objects_by_integers(dataframe, attribute_types)
+  File "/home/core/Documents/PedroAlves/autoBagging/metafeatures/core/object_analyzer.py", line 125, in _replace_objects_by_integers
+    dataframe.loc[:, column_name] = series
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/indexing.py", line 205, in __setitem__
+    self._setitem_with_indexer(indexer, value)
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/indexing.py", line 540, in _setitem_with_indexer
+    setter(labels[0], value)
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/indexing.py", line 490, in setter
+    s._data = s._data.setitem(indexer=pi, value=v)
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/internals/managers.py", line 560, in setitem
+    return self.apply("setitem", **kwargs)
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/internals/managers.py", line 438, in apply
+    applied = getattr(b, f)(**kwargs)
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/internals/blocks.py", line 1837, in setitem
+    self.values[indexer] = value
+  File "/home/core/anaconda3/envs/PedroAlves/lib/python3.8/site-packages/pandas/core/arrays/categorical.py", line 2189, in __setitem__
+    raise ValueError(
+ValueError: Cannot setitem on a Categorical with a new category, set the categories first
 
