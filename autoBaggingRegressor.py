@@ -155,6 +155,7 @@ class autoBaggingRegressor(BaseEstimator):
                                         bagging_workflow = KNORAE(bagging_workflow, random_state=0)
                                         bagging_workflow.fit(X_train,y_train)
                                         Rank_fold = mean_squared_error(bagging_workflow.predict(X_test),y_test)
+
                                     else:
                                         if DS['ds'] == 1:
                                             bagging_workflow = OLA(bagging_workflow,random_state=0)
@@ -177,7 +178,7 @@ class autoBaggingRegressor(BaseEstimator):
                                 # Este array contem as várias metafeatures do dataset e o scores do algoritmo base/parametros a testar
                                 x_meta.append(meta_features)
                                 indexBagging = indexBagging + 1
-                                
+                sys.stdout.write('\r'+ "                                                ")
                 sys.stdout.write('\r'+ "Elapsed: %.2f seconds\n"  % (time.time() - t))
                 # Backup Data
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Regressor_backup.csv")
@@ -222,9 +223,6 @@ class autoBaggingRegressor(BaseEstimator):
         self.meta_data = pd.DataFrame(meta_data)
         self.meta_target = meta_target
         meta_target = meta_target[:,1]
-        # Guardar Meta Data num ficheiro .CSV
-        self.meta_data.to_csv('./metadata/Meta_Data_Regressor.csv')
-        pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Regressor.csv')
         self.meta_data = self.meta_data.drop(self.meta_data.columns[0], axis=1,inplace=True)
         print("Meta-Data Created.")
         # Tratar dos dados para entrar no XGBOOST
@@ -301,10 +299,13 @@ class autoBaggingRegressor(BaseEstimator):
             else:
                 pruning_method_str = 'None'
             if ds > 0.5:
-                ds_str = 'DESIP'
-            else:
-                ds_str = 'None'
-            
+                    ds_str = 'KNORAE'
+                else:
+                    if ds < -0.5:
+                        ds_str = 'OLA'
+                    else:
+                        ds_str = 'None'
+                
             print("Recommended Bagging workflow: ")
             print("\tNumber of models: ", n_estimators)
             if pruning_method != 0:
