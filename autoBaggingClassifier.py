@@ -450,9 +450,11 @@ class autoBaggingClassifier(BaseEstimator):
         elif dtype in (np.int, np.int32, np.int64, np.float, np.float32,
                        np.float64, int, float):
             return True
+        elif dtype == 'category':
+            return True
         else:
             print("Não é válido o Dataset")
-            return False
+            return True
     
     def _skipCombination(self,pruning):
         if pruning['pruning_method'] == 0:
