@@ -367,7 +367,6 @@ class autoBaggingRegressor(BaseEstimator):
         # Inicializa as metafeatures
         meta_features['Number of Examples'] = dataset.shape[0]
         meta_features['Number of Features'] = dataset.shape[1]
-        meta_features['Number of Classes'] = dataset[target].unique().shape[0]
         meta_features_allnames = [
         'Features.SpearmanCorrelation.Mean',
         'Features.SpearmanCorrelation.StandardDeviation',
@@ -407,7 +406,6 @@ class autoBaggingRegressor(BaseEstimator):
         'FeaturesLabels.MutualInformation.Kurtosis',
         'Number of Examples',
         'Number of Features',
-        'Number of Classes',
         'n_estimators',
         'pruning_method',
         'pruning_cp',
