@@ -39,9 +39,18 @@ from statistics import mean
 
 class autoBaggingClassifier(BaseEstimator):
 
-    def __init__(self, meta_functions,post_processing_steps):
-        self.meta_functions = meta_functions
-        self.post_processing_steps = post_processing_steps
+    def __init__(self):
+        self.meta_functions = [Entropy(),
+                  MutualInformation(),
+                  SpearmanCorrelation(),
+                  basic_meta_functions.Mean(),
+                  basic_meta_functions.StandardDeviation(),
+                  basic_meta_functions.Skew(),
+                  basic_meta_functions.Kurtosis()]
+        self.post_processing_steps = [Mean(),
+                         StandardDeviation(),
+                         Skew(),
+                         Kurtosis()]
         self.base_estimators = {'Decision Tree (max_depth=None)': DecisionTreeClassifier(random_state=0)}
         self.estimators_switcher = {'Decision Tree (max_depth=None)': 1}
         self.bagging_grid = ParameterGrid({"n_estimators" : [50,100,200]})
