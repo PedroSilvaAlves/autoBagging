@@ -94,29 +94,12 @@ with open("ValidDatasets.txt", "w") as txt_file:
 
 print("Total amount of Datasets:",len(GoodDatasets))
 #####################
-
-post_processing_steps = [Mean(),
-                         StandardDeviation(),
-                         Skew(),
-                         Kurtosis()]
-
-
-meta_functions = [Entropy(),
-                  MutualInformation(),
-                  SpearmanCorrelation(),
-                  basic_meta_functions.Mean(),
-                  basic_meta_functions.StandardDeviation(),
-                  basic_meta_functions.Skew(),
-                  basic_meta_functions.Kurtosis()]
-
-
 #######################################################
 ################ AutoBagging Classifier################
 #######################################################
 
 print("\n\n\n***************** AutoBagging Classifier *****************")
-model = autoBaggingClassifier(meta_functions=meta_functions,
-                              post_processing_steps=post_processing_steps)
+model = autoBaggingClassifier()
 '''
 IN CASE THE PROGRAM FAIL'S WE CAN USE BACK UP DATA
 
