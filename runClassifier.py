@@ -35,18 +35,22 @@ from sklearn.utils.multiclass import type_of_target
 #######################################################
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.filterwarnings("ignore", message="divide by zero encountered in divide")
+warnings.filterwarnings("ignore", message="divide by zero encountered") 
+warnings.filterwarnings("ignore", message="invalid value encountered")
 openml.config.apikey = '819d1d52e9314798feeb0d96fbd45b7f'
 TargetNames = []
 Datasets = []
 # Open ML Valid Datasets
-#index = [551,556,557,561,674,659,661,663,665,703,710,712,684,687,688,690,
-#        692,697,1035,1027,1028,1029,1030,301,1089,1097,1098,1099,1072,1070,
-#        1091,1093,544,549,1228,456,482,483,485,506,509,510,521,523,524,526,527,
-#        530,533,535,536,539,540,511,513,515,516,518,519,520,491,492,494,497,498,
-#        191,194,195,199,200,203,204,205,207,224,230,231,211,213,427,
-#        294,299,42176,42111,42112,42113,42110,42165,41943,40505,
-#        41514,41515,41516,41517,41518,41519,41021,41968,41969]
-index = [555,556,557,561,703,712,686,690,1035,1027,1029,1030,301,1097,1099,549,456,482,506,509,524,533,536,540,513,516,519,520,494,191,194,195,200,203,204,207,224,230,213,299,41021,511,41514,41515,41516,41517,41518,41519,42110,42111,42112,42113,42165,42224,1028,41968,41969,41943]
+working = [1,3,5,6]
+index = [1,3,5,9,10,11,12,14,15,16,18,20,21,22,23,24,28,29,30,31,32,
+36,37,38,40,42,43,44,46,48,50,53,54,55,56,59,60,61,174,181,182,183,188,
+300,307,312,313,333,334,335,377,444,448,451,458,461,464,469,470,478,
+714,726,736,747,748,754,782,783,784,811,829,867,875,885,890,895,902,916,
+921,955,969,974,1013,1038,1043,1063,1116,1462,1464,1466,1467,1468,1475,
+1479,1480,1485,1487,1489,1491,1492,1493,1494,1497,1501,1504,1510,1515,
+1570,4134,4538,4550,6332,23381,40496,40499,40509,40536,40670,40701,
+40900,40910,40966,40971,40975,40978,40979,40981,40982,40983,40984,40994]
 
 GoodDatasets = []
 print("Get Datasets({})".format(len(index)))
@@ -62,24 +66,27 @@ for i in index:
         
         if y_type in ['binary', 'multiclass', 'multiclass-multioutput',
                       'multilabel-indicator', 'multilabel-sequences']:
-            if dtype in (np.object,):
+            if(dtype == 'category'):
                 Datasets.append(X)
                 TargetNames.append(target)
-                GoodDatasets.append(i)
+                print("OpenML Dataset[{}][{}]: {} - {} (examples, features)".format(n_dataset,i,y_type,np.shape(X)))
+                n_dataset=n_dataset+1
+            elif dtype in (np.object,):
+                Datasets.append(X)
+                TargetNames.append(target)
                 print("OpenML Dataset[{}][{}]: {} - {} (examples, features)".format(n_dataset,i,y_type,np.shape(X)))
                 n_dataset=n_dataset+1
             elif dtype in (np.int, np.int32, np.int64, np.float, np.float32,
-                        np.float64, int, float):
+                np.float64, int, float):
                 Datasets.append(X)
                 TargetNames.append(target)
-                GoodDatasets.append(i)
                 print("OpenML Dataset[{}][{}]: {} - {} (examples, features)".format(n_dataset,i,y_type,np.shape(X)))
                 n_dataset=n_dataset+1
         else:     
             print("Invalid!")      
         
-    except Exception:
-        print("Error ", i)
+    except Exception as e:
+        print("Error ", i, e)
 
 with open("ValidDatasets.txt", "w") as txt_file:
     for id in GoodDatasets:
