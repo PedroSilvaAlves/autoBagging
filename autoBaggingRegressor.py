@@ -36,11 +36,19 @@ from deslibautobagging.dcs.ola import OLA
 
 class autoBaggingRegressor(BaseEstimator):
 
-    def __init__(self, meta_functions,post_processing_steps):
+    def __init__(self):
         super().__init__()
-        self.meta_functions = meta_functions
-        self.post_processing_steps = post_processing_steps
-                           
+        self.meta_functions = [Entropy(),
+                  MutualInformation(),
+                  SpearmanCorrelation(),
+                  basic_meta_functions.Mean(),
+                  basic_meta_functions.StandardDeviation(),
+                  basic_meta_functions.Skew(),
+                  basic_meta_functions.Kurtosis()]
+        self.post_processing_steps = [Mean(),
+                         StandardDeviation(),
+                         Skew(),
+                         Kurtosis()]              
         self.base_estimators = {'Decision Tree (max_depth=1)': DecisionTreeRegressor(max_depth=1, random_state=0),
                                 #'Decision Tree (max_depth=2)': DecisionTreeRegressor(max_depth=2, random_state=0),
                                 #'Decision Tree (max_depth=3)': DecisionTreeRegressor(max_depth=3, random_state=0),
