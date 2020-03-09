@@ -37,7 +37,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import make_moons, make_circles, make_classification
 from sklearn.neural_network import MLPClassifier
 
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.naive_bayes import GaussianNB
 
@@ -45,7 +45,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
@@ -57,6 +57,10 @@ names = ["Decision Tree (Max Depth=1)","Decision Tree (Max Depth=5)","Decision T
          "Naive Bayes", "QDA"]
 
 classifiers = [
+    KNeighborsRegressor()
+    #DecisionTreeRegressor(),
+    #DecisionTreeRegressor(max_depth=1),
+    #DecisionTreeRegressor(max_depth=5)
     #GaussianNB()
     #KNeighborsClassifier(1),
     #KNeighborsClassifier(3),
@@ -64,9 +68,9 @@ classifiers = [
     #SVC(kernel="linear", C=0.025),
     #SVC(gamma=2, C=1),
     #GaussianProcessClassifier(1.0 * RBF(1.0)),
-    DecisionTreeClassifier(max_depth=1),
-    DecisionTreeClassifier(max_depth=5),
-    DecisionTreeClassifier()
+    #DecisionTreeClassifier(max_depth=1),
+    #DecisionTreeClassifier(max_depth=5),
+    #DecisionTreeClassifier()
     #RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
     #MLPClassifier(alpha=1, max_iter=1000),
     #AdaBoostClassifier(),
@@ -76,6 +80,7 @@ classifiers = [
 
 X, y = make_classification(n_features=2, n_redundant=0, n_informative=2,
                            random_state=1, n_clusters_per_class=1)
+                           
 rng = np.random.RandomState(2)
 X += 2 * rng.uniform(size=X.shape)
 linearly_separable = (X, y)
@@ -128,14 +133,14 @@ for ds_cnt, ds in enumerate(datasets):
 
         # Plot the decision boundary. For that, we will assign a color to each
         # point in the mesh [x_min, x_max]x[y_min, y_max].
-        if hasattr(clf, "decision_function"):
-            Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
-        else:
-            Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
+        #if hasattr(clf, "decision_function"):
+        #    Z = clf.decision_function(np.c_[xx.ravel(), yy.ravel()])
+        #else:
+        #    Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])[:, 1]
 
         # Put the result into a color plot
-        Z = Z.reshape(xx.shape)
-        ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
+        #Z = Z.reshape(xx.shape)
+        #ax.contourf(xx, yy, Z, cmap=cm, alpha=.8)
 
         # Plot the training points
         ax.scatter(X_train[:, 0], X_train[:, 1], c=y_train, cmap=cm_bright,
@@ -152,6 +157,8 @@ for ds_cnt, ds in enumerate(datasets):
             ax.set_title(name)
         ax.text(xx.max() - .3, yy.min() + .3, ('%.2f' % score).lstrip('0'),
                 size=15, horizontalalignment='right')
+        y_pred = clf.predict(X_test)
+        plt.plot(X_test, y_pred, color='blue', linewidth=3)
         i += 1
 plt.tight_layout()
 plt.show()
