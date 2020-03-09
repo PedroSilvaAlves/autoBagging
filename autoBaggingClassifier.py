@@ -40,6 +40,7 @@ from statistics import mean
 class autoBaggingClassifier(BaseEstimator):
 
     def __init__(self):
+        super().__init__()
         self.meta_functions = [Entropy(),
                   MutualInformation(),
                   SpearmanCorrelation(),
