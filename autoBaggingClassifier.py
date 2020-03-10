@@ -6,14 +6,15 @@ import joblib
 import warnings
 import time
 import sys
+import random
 from sklearn.utils.multiclass import type_of_target
 from sklearn.utils import column_or_1d
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import BaggingClassifier
+from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.ensemble import BaggingClassifier, BaggingRegressor
 from sklearn.ensemble import VotingClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.multioutput import MultiOutputClassifier
@@ -39,8 +40,9 @@ from statistics import mean
 
 class autoBaggingClassifier(BaseEstimator):
 
-    def __init__(self):
+    def __init__(self, silence=True):
         super().__init__()
+        self.silence=silence
         self.meta_functions = [Entropy(),
                   MutualInformation(),
                   SpearmanCorrelation(),
@@ -54,10 +56,12 @@ class autoBaggingClassifier(BaseEstimator):
                          Kurtosis()]
         self.base_estimators = {'Decision Tree (max_depth=None)': DecisionTreeClassifier(random_state=0)}
         self.estimators_switcher = {'Decision Tree (max_depth=None)': 1}
+        self.estimators_switcher2 = {1 : 'Decision Tree (max_depth=None)'}
         self.bagging_grid = ParameterGrid({"n_estimators" : [50,100,200]})
         self.pruning = ParameterGrid({'pruning_method' : [-1,0,1],
                                       'pruning_cp': [0.25,0.5,0.75]})
         self.DStechique = ParameterGrid({ 'ds' : [-1,0,1]})
+        
 
     def fit(self,
             datasets,      # Lista com datasets
@@ -71,9 +75,10 @@ class autoBaggingClassifier(BaseEstimator):
         for dataset, target in zip(datasets, target_names):  # Percorre todos os datasets para criar Meta Data
             if self._validateDataset(dataset, target):
                 ndataset= ndataset + 1
-                print("________________________________________________________________________")
-                print("Dataset nº ", ndataset)
-                print("Shape: {}(examples, features)".format(np.shape(dataset)))
+                if not self.silence:
+                    print("________________________________________________________________________")
+                    print("Dataset nº ", ndataset)
+                    print("Shape: {}(examples, features)".format(np.shape(dataset)))
                 # Number of Bagging Workflows
                 indexBagging = 1
                 indexMaxBagging = 0
@@ -94,7 +99,8 @@ class autoBaggingClassifier(BaseEstimator):
                         dataset = dataset.drop(columns=f, axis=1)
 
                 # Convert +/- Inf to NaN
-                dataset.replace([np.inf, -np.inf], np.nan)
+                dataset.replace(np.inf, np.nan)
+                dataset.replace(-np.inf, np.nan)
                 # Drop Columns with all NaN values
                 dataset = dataset.dropna(axis=1,how ='all')
                 # Drop examples with some Nan Values
@@ -204,71 +210,160 @@ class autoBaggingClassifier(BaseEstimator):
                 # Backup Data
                 pd.DataFrame(x_meta).to_csv("./metadata/Meta_Data_Classifier_backup.csv")
                 pd.DataFrame(y_meta).to_csv("./metadata/Meta_Target_Classifier_backup.csv")
-        
-        print("________________________________________________________________________")
+        if not self.silence:
+            print("________________________________________________________________________")
         self.meta_data = pd.DataFrame(x_meta)
         self.meta_target = np.array(y_meta)
         # Save Meta Data to .CSV file
         self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
         pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Classifier.csv')
-        print("Meta-Data Created and Saved.")
+        if not self.silence:
+            print("Meta-Data Created and Saved.")
         # Deal with data before XGBOOST
-        for f in self.meta_data.columns:
-            if self.meta_data[f].dtype == 'object':
-                lbl = LabelEncoder()
-                lbl.fit(list(self.meta_data[f].values))
-                self.meta_data[f] = lbl.transform(
-                    list(self.meta_data[f].values))
-
+        self.meta_data = self.meta_data[[
+        'Features.Entropy.Mean',
+        'Features.Entropy.StandardDeviation',
+        'Features.Entropy.Skew',
+        'Features.Entropy.Kurtosis',
+        'Features.MutualInformation.Mean',
+        'Features.MutualInformation.StandardDeviation',
+        'Features.MutualInformation.Skew',
+        'Features.MutualInformation.Kurtosis',
+        'Features.SpearmanCorrelation.Mean',
+        'Features.SpearmanCorrelation.StandardDeviation',
+        'Features.SpearmanCorrelation.Skew',
+        'Features.SpearmanCorrelation.Kurtosis',
+        'FeaturesLabels.SpearmanCorrelation.Mean',
+        'FeaturesLabels.SpearmanCorrelation.StandardDeviation',
+        'FeaturesLabels.SpearmanCorrelation.Skew',
+        'FeaturesLabels.SpearmanCorrelation.Kurtosis',
+        'Features.Mean.Mean',
+        'Features.Mean.StandardDeviation',
+        'Features.Mean.Skew',
+        'Features.Mean.Kurtosis',
+        'Features.StandardDeviation.Mean',
+        'Features.StandardDeviation.StandardDeviation',
+        'Features.StandardDeviation.Skew',
+        'Features.StandardDeviation.Kurtosis',
+        'Features.Skew.Mean',
+        'Features.Skew.StandardDeviation',
+        'Features.Skew.Skew',
+        'Features.Skew.Kurtosis',
+        'Features.Kurtosis.Mean',
+        'Features.Kurtosis.StandardDeviation',
+        'Features.Kurtosis.Skew',
+        'Features.Kurtosis.Kurtosis',
+        'FeaturesLabels.MutualInformation.Mean',
+        'FeaturesLabels.MutualInformation.StandardDeviation',
+        'FeaturesLabels.MutualInformation.Skew',
+        'FeaturesLabels.MutualInformation.Kurtosis',
+        'Number of Examples',
+        'Number of Features',
+        'Number of Classes',
+        'n_estimators',
+        'pruning_method',
+        'pruning_cp',
+        'ds',
+        'Algorithm'
+        ]]
+        self.meta_data.replace([np.inf, -np.inf], np.nan, inplace=True)
         self.meta_data.fillna((-999), inplace=True)
-        self.meta_data = np.array(self.meta_data)
-        self.meta_data = self.meta_data.astype(float)
 
-        print("Constructing Meta-Model:")
+        if not self.silence:
+            print("Constructing Meta-Model:")
+            
         # Create Meta Model of XGBOOST
         self.meta_model = xgb.XGBRegressor(objective="reg:squarederror",
-                                        colsample_bytree=0.3,
-                                        learning_rate=0.1,
-                                        max_depth=5,
-                                        alpha=10,
-                                        n_estimators=100,
-                                        n_jobs=-1)
-        # Apply Learning algorithm
-        self.meta_model.fit(self.meta_data, self.meta_target)
+                                       colsample_bytree=0.3,
+                                       learning_rate=0.1,
+                                       max_depth=5,
+                                       alpha=7,
+                                       eval_metric='auc',
+                                       n_estimators=100,
+                                       n_jobs=-1,
+                                       min_child_weight=3)
+        #self.meta_model = BaggingRegressor(random_state=0)
+        #print(self.meta_target)
+        self.meta_model = self.meta_model.fit(np.array(self.meta_data), self.meta_target)
         self.is_fitted = True
         return self
 
     def load_fit(self, meta_data, meta_target):
         # Meta Data é a junção de todas as metafeatures com os scores dos respeticos algoritmos base
-        self.meta_data = pd.DataFrame(meta_data)
-        self.meta_target = meta_target
-        meta_target = meta_target[:,1]
-        # Guardar Meta Data num ficheiro .CSV
-        self.meta_data.to_csv('./metadata/Meta_Data_Classifier.csv')
-        pd.DataFrame(self.meta_target).to_csv('./metadata/Meta_Target_Classifier.csv')
-        self.meta_data = self.meta_data.drop(self.meta_data.columns[0], axis=1,inplace=True)
-        print("Meta-Data Created.")
-        # Tratar dos dados para entrar no XGBOOST
-        for f in self.meta_data.columns:
-            if self.meta_data[f].dtype == 'object':
-                lbl = LabelEncoder()
-                lbl.fit(list(self.meta_data[f].values))
-                self.meta_data[f] = lbl.transform(
-                    list(self.meta_data[f].values))
-
+        self.meta_data= meta_data.drop(meta_data.columns[0], axis=1)
+        self.meta_data = self.meta_data[[
+        'Features.Entropy.Mean',
+        'Features.Entropy.StandardDeviation',
+        'Features.Entropy.Skew',
+        'Features.Entropy.Kurtosis',
+        'Features.MutualInformation.Mean',
+        'Features.MutualInformation.StandardDeviation',
+        'Features.MutualInformation.Skew',
+        'Features.MutualInformation.Kurtosis',
+        'Features.SpearmanCorrelation.Mean',
+        'Features.SpearmanCorrelation.StandardDeviation',
+        'Features.SpearmanCorrelation.Skew',
+        'Features.SpearmanCorrelation.Kurtosis',
+        'FeaturesLabels.SpearmanCorrelation.Mean',
+        'FeaturesLabels.SpearmanCorrelation.StandardDeviation',
+        'FeaturesLabels.SpearmanCorrelation.Skew',
+        'FeaturesLabels.SpearmanCorrelation.Kurtosis',
+        'Features.Mean.Mean',
+        'Features.Mean.StandardDeviation',
+        'Features.Mean.Skew',
+        'Features.Mean.Kurtosis',
+        'Features.StandardDeviation.Mean',
+        'Features.StandardDeviation.StandardDeviation',
+        'Features.StandardDeviation.Skew',
+        'Features.StandardDeviation.Kurtosis',
+        'Features.Skew.Mean',
+        'Features.Skew.StandardDeviation',
+        'Features.Skew.Skew',
+        'Features.Skew.Kurtosis',
+        'Features.Kurtosis.Mean',
+        'Features.Kurtosis.StandardDeviation',
+        'Features.Kurtosis.Skew',
+        'Features.Kurtosis.Kurtosis',
+        'FeaturesLabels.MutualInformation.Mean',
+        'FeaturesLabels.MutualInformation.StandardDeviation',
+        'FeaturesLabels.MutualInformation.Skew',
+        'FeaturesLabels.MutualInformation.Kurtosis',
+        'Number of Examples',
+        'Number of Features',
+        'Number of Classes',
+        'n_estimators',
+        'pruning_method',
+        'pruning_cp',
+        'ds',
+        'Algorithm'
+        ]]
+        self.meta_data.replace([np.inf, -np.inf], np.nan, inplace=True)
         self.meta_data.fillna((-999), inplace=True)
-        self.meta_data = np.array(self.meta_data)
-        self.meta_data = self.meta_data.astype(float)
-        # Criar o Meta Model XGBOOST
+        
+        meta_target.fillna((-0.8), inplace=True)
+        meta_target = np.array(meta_target)
+        self.meta_target = np.squeeze(meta_target[:,1])
+        y_meta = []
+        for x in np.nditer(self.meta_target):
+             y_meta.append(float(x))
+        self.meta_target = np.array(y_meta)
+        if not self.silence:
+            print("Meta-Data Loaded.")
+            print("Constructing Meta-Model:")
+
+         # Create Meta Model of XGBOOST
         self.meta_model = xgb.XGBRegressor(objective="reg:squarederror",
-                                        colsample_bytree=0.3,
-                                        learning_rate=0.1,
-                                        max_depth=5,
-                                        alpha=10,
-                                        n_estimators=100,
-                                        n_jobs=-1)
-        # Aplicar Learning algorithm
-        self.meta_model.fit(self.meta_data, self.meta_target)
+                                       colsample_bytree=0.3,
+                                       learning_rate=0.1,
+                                       max_depth=5,
+                                       alpha=7,
+                                       eval_metric='auc',
+                                       n_estimators=100,
+                                       n_jobs=-1,
+                                       min_child_weight=3)
+        #self.meta_model = BaggingRegressor(random_state=0)
+        #print(self.meta_target)
+        self.meta_model = self.meta_model.fit(np.array(self.meta_data), self.meta_target)
         self.is_fitted = True
         return self
     
@@ -287,6 +382,7 @@ class autoBaggingClassifier(BaseEstimator):
                 BestScore = -1
                 score = 0
                 RecommendedBagging = {}
+                bagging_combination = []
                 for params in self.bagging_grid:  # Combinações de Parametros
                         for DS in self.DStechique:
                             for pruning in self.pruning:
@@ -301,18 +397,70 @@ class autoBaggingClassifier(BaseEstimator):
                                     features = []
                                     features.append(meta_features)
                                     meta_features = pd.DataFrame(features)
-                                    score = self.meta_model.predict(np.array(meta_features))
-                                    if score > BestScore:
-                                        BestScore=score
-                                        best_base_estimator = base_estimator
-                                        RecommendedBagging = {}
-                                        RecommendedBagging = meta_features_dic.copy()
-                # Prints e construção do Bagging previsto
-                n_estimators = int(RecommendedBagging['n_estimators'])
-                pruning_method = int(RecommendedBagging['pruning_method'])
-                pruning_cp = int(RecommendedBagging['pruning_cp']/100)
-                ds = int(RecommendedBagging['ds'])
-                base_estimator = best_base_estimator
+                                    meta_features = meta_features[[
+                                    'Features.Entropy.Mean',
+                                    'Features.Entropy.StandardDeviation',
+                                    'Features.Entropy.Skew',
+                                    'Features.Entropy.Kurtosis',
+                                    'Features.MutualInformation.Mean',
+                                    'Features.MutualInformation.StandardDeviation',
+                                    'Features.MutualInformation.Skew',
+                                    'Features.MutualInformation.Kurtosis',
+                                    'Features.SpearmanCorrelation.Mean',
+                                    'Features.SpearmanCorrelation.StandardDeviation',
+                                    'Features.SpearmanCorrelation.Skew',
+                                    'Features.SpearmanCorrelation.Kurtosis',
+                                    'FeaturesLabels.SpearmanCorrelation.Mean',
+                                    'FeaturesLabels.SpearmanCorrelation.StandardDeviation',
+                                    'FeaturesLabels.SpearmanCorrelation.Skew',
+                                    'FeaturesLabels.SpearmanCorrelation.Kurtosis',
+                                    'Features.Mean.Mean',
+                                    'Features.Mean.StandardDeviation',
+                                    'Features.Mean.Skew',
+                                    'Features.Mean.Kurtosis',
+                                    'Features.StandardDeviation.Mean',
+                                    'Features.StandardDeviation.StandardDeviation',
+                                    'Features.StandardDeviation.Skew',
+                                    'Features.StandardDeviation.Kurtosis',
+                                    'Features.Skew.Mean',
+                                    'Features.Skew.StandardDeviation',
+                                    'Features.Skew.Skew',
+                                    'Features.Skew.Kurtosis',
+                                    'Features.Kurtosis.Mean',
+                                    'Features.Kurtosis.StandardDeviation',
+                                    'Features.Kurtosis.Skew',
+                                    'Features.Kurtosis.Kurtosis',
+                                    'FeaturesLabels.MutualInformation.Mean',
+                                    'FeaturesLabels.MutualInformation.StandardDeviation',
+                                    'FeaturesLabels.MutualInformation.Skew',
+                                    'FeaturesLabels.MutualInformation.Kurtosis',
+                                    'Number of Examples',
+                                    'Number of Features',
+                                    'Number of Classes',
+                                    'n_estimators',
+                                    'pruning_method',
+                                    'pruning_cp',
+                                    'ds',
+                                    'Algorithm'
+                                    ]]
+                                    meta_features.replace([np.inf, -np.inf], np.nan, inplace=True)
+                                    meta_features.fillna((-999), inplace=True)
+                                    bagging_combination.append(np.array(meta_features.copy()))
+                bagging_combination = np.squeeze(np.array(bagging_combination))
+                scores = self.meta_model.predict(bagging_combination)
+                print(self.meta_model)
+                print("Recomendações=",scores)
+                BestScore = np.argmax(scores)
+                #BestScore = int(random.uniform(0, 63)) # Until Bugged
+                #print("Bagging index escolhido -> ", BestScore)
+                RecommendedBagging = bagging_combination[BestScore]
+                # Prints e construção do Bagging recomendado
+                npSize= RecommendedBagging.size
+                n_estimators = int(RecommendedBagging[npSize-5])
+                pruning_method = int(RecommendedBagging[npSize-4])
+                pruning_cp = float(RecommendedBagging[npSize-3]/100)
+                ds = int(RecommendedBagging[npSize-2])
+                base_estimator = RecommendedBagging[npSize-1]
 
                 # String para visualização
                 if pruning_method == 1:
@@ -329,20 +477,20 @@ class autoBaggingClassifier(BaseEstimator):
                         ds_str = 'OLA'
                     else:
                         ds_str = 'None'
-                
-                print("Recommended Bagging workflow: ")
-                print("\tNumber of models: ", n_estimators)
-                if pruning_method != 0:
-                    print("\tPruning Method: ", pruning_method_str)
-                    print("\tPruning CutPoint: ", pruning_cp*100)
-                else:
-                    print("\tPruning: ",pruning_method_str)
-                print("\tDynamic Selection: ", ds_str)
-                print("\tAlgorithm: ", base_estimator)
+                if not self.silence:
+                    print("Recommended Bagging workflow: ")
+                    print("\tNumber of models: ", n_estimators)
+                    if pruning_method != 0:
+                        print("\tPruning Method: ", pruning_method_str)
+                        print("\tPruning CutPoint: ", pruning_cp*100)
+                    else:
+                        print("\tPruning: ",pruning_method_str)
+                    print("\tDynamic Selection: ", ds_str)
+                    print("\tAlgorithm: ", self.estimators_switcher2[base_estimator])
 
                 # BaggingWorkflow
                 bagging_workflow = BaggingClassifier(
-                        base_estimator= self.base_estimators[base_estimator],
+                        base_estimator= self.base_estimators[self.estimators_switcher2[base_estimator]],
                         n_estimators=n_estimators,
                         random_state=0,
                         n_jobs=-1
@@ -355,13 +503,14 @@ class autoBaggingClassifier(BaseEstimator):
                 X_train = X
                 y_train = y
                 # Treinar o modelo
-                k_fold = KFold(n_splits=4, random_state=0)
-                cross_vals = cross_validate(bagging_workflow,X_train,y_train,cv=k_fold, scoring=make_scorer(cohen_kappa_score), return_estimator=True)
-                bagging_workflow = cross_vals['estimator'][np.argmax(cross_vals['test_score'])]
+                #k_fold = KFold(n_splits=4, random_state=0)
+                #cross_vals = cross_validate(bagging_workflow,X_train,y_train,cv=k_fold, scoring=make_scorer(cohen_kappa_score), return_estimator=True)
+                #bagging_workflow = cross_vals['estimator'][np.argmax(cross_vals['test_score'])]
                 bagging_workflow.fit(X_train, y_train)
                 predictions = []
                 if pruning_method == 1 and pruning_cp != 0:
-                    print("Waiting for BB")
+                    if not self.silence:
+                        print("Waiting for BB")
                     for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                         predictions.append(estimator.predict(X_train[:, features]))
                     bb_index= self._bb(y_train, predictions, X_train, pruning_cp)
@@ -371,7 +520,8 @@ class autoBaggingClassifier(BaseEstimator):
                     bagging_workflow.estimators_ = estimators
                 else:
                     if pruning_method == -1 and pruning_cp != 0:
-                        print("Waiting for MDSQ")
+                        if not self.silence:
+                            print("Waiting for MDSQ")
                         for estimator, features in zip(bagging_workflow.estimators_,bagging_workflow.estimators_features_):
                             predictions.append(estimator.predict(X_train[:, features]))
                         mdsq_index= self._mdsq(y_train, predictions, X_train, pruning_cp)
@@ -381,11 +531,11 @@ class autoBaggingClassifier(BaseEstimator):
                         bagging_workflow.estimators_ = estimators
                         
                 if ds == -1:
-                    bagging_workflow = KNORAE(bagging_workflow)
+                    bagging_workflow = KNORAE(bagging_workflow, random_state=0)
                     bagging_workflow.fit(X_train,y_train)
 
                 if ds == 1:
-                    bagging_workflow = OLA(bagging_workflow)
+                    bagging_workflow = OLA(bagging_workflow, random_state=0)
                     bagging_workflow.fit(X_train,y_train)
                 return bagging_workflow
             else:

@@ -42,16 +42,25 @@ openml.config.apikey = '819d1d52e9314798feeb0d96fbd45b7f'
 TargetNames = []
 Datasets = []
 # Open ML Valid Datasets
-working = [1,3,5,6]
-index = [1,3,5,9,10,11,12,14,15,16,18,20,21,22,23,24,28,29,30,31,32,
+#working = [1,3,5,6]
+#index = [1,3,5,9,10,11,12,14,15,16,18,20,21,22,23,24,28,29,30,31,32,
+#36,37,38,40,42,43,44,46,48,50,53,54,55,56,59,60,61,174,181,182,183,188,
+#300,307,312,313,333,334,335,377,444,448,451,458,461,464,469,470,478,
+#714,726,736,747,748,754,782,783,784,811,829,867,875,885,890,895,902,916,
+#921,955,969,974,1013,1038,1043,1063,1116,1462,1464,1466,1467,1468,1475,
+#1479,1480,1485,1487,1489,1491,1492,1493,1494,1497,1501,1504,1510,1515,
+#1570,4134,4538,4550,6332,23381,40496,40499,40509,40536,40670,40701,
+#40900,40910,40966,40971,40975,40978,40979,40981,40982,40983,40984,40994]
+working = [11,12,14]
+index = [11,12,14,15,16,18,20,21,22,23,24,28,29,30,31,32,
 36,37,38,40,42,43,44,46,48,50,53,54,55,56,59,60,61,174,181,182,183,188,
 300,307,312,313,333,334,335,377,444,448,451,458,461,464,469,470,478,
 714,726,736,747,748,754,782,783,784,811,829,867,875,885,890,895,902,916,
 921,955,969,974,1013,1038,1043,1063,1116,1462,1464,1466,1467,1468,1475,
 1479,1480,1485,1487,1489,1491,1492,1493,1494,1497,1501,1504,1510,1515,
 1570,4134,4538,4550,6332,23381,40496,40499,40509,40536,40670,40701,
-40900,40910,40966,40971,40975,40978,40979,40981,40982,40983,40984,40994]
-index = [875]
+40900,40910,40966,40971,40975,40978,40979,40981,40982,40983,40984,40994] 
+index = [11,12,14]
 GoodDatasets = []
 print("Get Datasets({})".format(len(index)))
 # Load and Validate Datasets
@@ -93,57 +102,72 @@ with open("ValidDatasets.txt", "w") as txt_file:
         txt_file.write(str(id) + ",")
 
 print("Total amount of Datasets:",len(GoodDatasets))
-#####################
+
 #######################################################
 ################ AutoBagging Classifier################
 #######################################################
 
 print("\n\n\n***************** AutoBagging Classifier *****************")
-model = autoBaggingClassifier()
-'''
-IN CASE THE PROGRAM FAIL'S WE CAN USE BACK UP DATA
-
-meta_data = pd.read_csv("./metadata/MetaData_backup.csv")
-meta_target = pd.read_csv("./metadata/MetaTarget_backup.csv")
-meta_target = np.array(meta_target)
+model = autoBaggingClassifier(silence=False)
+meta_data = pd.read_csv("./metadata/Meta_Data_Classifier_final.csv")
+meta_target = pd.read_csv("./metadata/Meta_Target_Classifier_final.csv")
 model = model.load_fit(meta_data,meta_target)
-'''
 
-print("\nCreate Meta-Data from {} Datasets then Fit Meta-Model".format(len(index)))
-model = model.fit(Datasets, TargetNames)
-joblib.dump(model, "./models/autoBaggingClassifierModel.sav")
+#print("\nCreate Meta-Data from {} Datasets then Fit Meta-Model".format(len(index)))
+#model = model.fit(Datasets, TargetNames)
+#joblib.dump(model, "./models/autoBaggingClassifierModel.sav")
+
 
 #######################################################
 ################ Loading Test Dataset #################
 #######################################################
-dataset = pd.read_csv('./datasets_classifier/test/weatherAUS.csv')
-dataset = dataset.drop('RISK_MM', axis=1)
-targetname = 'RainTomorrow'
-dataset[targetname] = dataset[targetname].map({'No': 0, 'Yes' : 1}).astype(int)
-dataset.fillna((-999), inplace=True)
-for f in dataset.columns:
-    if dataset[f].dtype == 'object':
-        dataset = dataset.drop(columns=f, axis=1)
 
-dataset_train, dataset_test = train_test_split(dataset,test_size=0.33,
-                                                    random_state=0,shuffle=True)
-X_train = SimpleImputer().fit_transform(dataset_train.drop(targetname, axis=1))
-y_train = dataset_train[targetname]
-X_test = SimpleImputer().fit_transform(dataset_test.drop(targetname, axis=1))
-y_test = dataset_test[targetname]
+i = 0
+for dataset, target in zip(Datasets, TargetNames):
+    i= i + 1
+    print("________________________________________________________________________")
+    print("Dataset nº ", i)
+    print("Shape: {}(examples, features)".format(np.shape(dataset)))
 
+    for f in dataset.columns:
+        if dataset[f].dtype == 'object':
+            dataset = dataset.drop(columns=f, axis=1)
+    
+    # Convert +/- Inf to NaN
+    dataset.replace(np.inf, np.nan)
+    dataset.replace(-np.inf, np.nan)
+    # Drop Columns with all NaN values
+    dataset = dataset.dropna(axis=1,how ='all')
+    # Drop examples with some Nan Values
+    dataset = dataset.dropna(axis=0,how = 'any') 
+    dataset = dataset.reset_index(drop=True)
+    
+    labelencoder = LabelEncoder()
+    dataset[target] = labelencoder.fit_transform(dataset[target])
 
-# Getting recommended Bagging model of the dataset
-bestBagging = model.predict(dataset_train,targetname)
-# Getting Default Bagging
-DefaultBagging = BaggingClassifier(random_state=0)
-DefaultBagging.fit(X_train,y_train)
+    dataset_train, dataset_test = train_test_split(dataset, test_size=0.3,
+                                                    random_state=0, shuffle=True)
+    dataset_train = dataset_train.reset_index(drop=True)
+    dataset_test = dataset_test.reset_index(drop=True)
+    
+    # Getting recommended Bagging model of the dataset
+    autoBagging = model.predict(dataset_train.copy(), target)
 
-#######################################################
-############## Single Testing Bagging #################
-#######################################################
-print("Verify Bagging algorithm score:")
-score = bestBagging.score(X_test,y_test)
-print("Recommended  Bagging --> Score: %0.2f" % score)
-score = DefaultBagging.score(X_test,y_test)
-print("Default Bagging --> Score: %0.2f" % score)
+    # Getting Default Bagging
+    X_train = SimpleImputer().fit_transform(dataset_train.drop(target, axis=1))
+    y_train = dataset_train[target]
+    X_test = SimpleImputer().fit_transform(dataset_test.drop(target, axis=1))
+    y_test = dataset_test[target]
+    
+    DefaultBagging = BaggingClassifier(random_state=0, n_estimators=100)
+    DefaultBagging.fit(X_train.copy(),y_train.copy())
+
+    #######################################################
+    ################ Testing Bagging ######################
+    #######################################################
+
+    score = autoBagging.score(X_test.copy(),y_test.copy())
+    print("Recommended Bagging --> Score: %0.2f" % score)
+    score = DefaultBagging.score(X_test.copy(),y_test.copy())
+    print("Default Bagging     --> Score: %0.2f" % score)
+    
