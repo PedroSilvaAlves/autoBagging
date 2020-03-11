@@ -51,16 +51,14 @@ Datasets = []
 #1479,1480,1485,1487,1489,1491,1492,1493,1494,1497,1501,1504,1510,1515,
 #1570,4134,4538,4550,6332,23381,40496,40499,40509,40536,40670,40701,
 #40900,40910,40966,40971,40975,40978,40979,40981,40982,40983,40984,40994]
-working = [11,12,14]
-index = [11,12,14,15,16,18,20,21,22,23,24,28,29,30,31,32,
-36,37,38,40,42,43,44,46,48,50,53,54,55,56,59,60,61,174,181,182,183,188,
-300,307,312,313,333,334,335,377,444,448,451,458,461,464,469,470,478,
+working = [11,12,14,15,16,18,22,23,24,30,32,36,40,43,44,53,54,59,60,61,181,192,312,313,377,458,461,464]
+index = [469,470,478,
 714,726,736,747,748,754,782,783,784,811,829,867,875,885,890,895,902,916,
 921,955,969,974,1013,1038,1043,1063,1116,1462,1464,1466,1467,1468,1475,
 1479,1480,1485,1487,1489,1491,1492,1493,1494,1497,1501,1504,1510,1515,
 1570,4134,4538,4550,6332,23381,40496,40499,40509,40536,40670,40701,
 40900,40910,40966,40971,40975,40978,40979,40981,40982,40983,40984,40994] 
-index = [11,12,14]
+#index = [11,12,14]
 GoodDatasets = []
 print("Get Datasets({})".format(len(index)))
 # Load and Validate Datasets
@@ -122,6 +120,9 @@ model = model.load_fit(meta_data,meta_target)
 ################ Loading Test Dataset #################
 #######################################################
 
+autoBagging_score = []
+defaultBagging_score = []
+
 i = 0
 for dataset, target in zip(Datasets, TargetNames):
     i= i + 1
@@ -167,7 +168,14 @@ for dataset, target in zip(Datasets, TargetNames):
     #######################################################
 
     score = autoBagging.score(X_test.copy(),y_test.copy())
+    autoBagging_score.append(score)
     print("Recommended Bagging --> Score: %0.2f" % score)
     score = DefaultBagging.score(X_test.copy(),y_test.copy())
+    defaultBagging_score.append(score)
     print("Default Bagging     --> Score: %0.2f" % score)
-    
+
+with open("Results.txt", "w") as txt_file:
+    txt_file.write("DEFAULT , AUTOBAGGING")
+    for auto,default in zip(autoBagging_score,defaultBagging_score):
+        print(default, ",", auto)
+        txt_file.write(str(default) + ","+ str(auto))

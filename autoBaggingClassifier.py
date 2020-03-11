@@ -356,11 +356,11 @@ class autoBaggingClassifier(BaseEstimator):
                                        colsample_bytree=0.3,
                                        learning_rate=0.1,
                                        max_depth=5,
-                                       alpha=7,
+                                       alpha=5,
                                        eval_metric='auc',
                                        n_estimators=100,
                                        n_jobs=-1,
-                                       min_child_weight=3)
+                                       min_child_weight=10)
         #self.meta_model = BaggingRegressor(random_state=0)
         #print(self.meta_target)
         self.meta_model = self.meta_model.fit(np.array(self.meta_data), self.meta_target)
@@ -448,8 +448,8 @@ class autoBaggingClassifier(BaseEstimator):
                                     bagging_combination.append(np.array(meta_features.copy()))
                 bagging_combination = np.squeeze(np.array(bagging_combination))
                 scores = self.meta_model.predict(bagging_combination)
-                print(self.meta_model)
-                print("Recomendações=",scores)
+                #print(self.meta_model)
+                #print("Recomendações=",scores)
                 BestScore = np.argmax(scores)
                 #BestScore = int(random.uniform(0, 63)) # Until Bugged
                 #print("Bagging index escolhido -> ", BestScore)
