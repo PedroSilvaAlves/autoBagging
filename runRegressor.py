@@ -94,27 +94,11 @@ print("Total amount of Datasets:",len(GoodDatasets))
 #     quit()
 ######################
 
-post_processing_steps = [Mean(),
-                         StandardDeviation(),
-                         Skew(),
-                         Kurtosis()]
-
-
-meta_functions = [Entropy(),
-                  MutualInformation(),
-                  SpearmanCorrelation(),
-                  basic_meta_functions.Mean(),
-                  basic_meta_functions.StandardDeviation(),
-                  basic_meta_functions.Skew(),
-                  basic_meta_functions.Kurtosis()]
-
-
 #######################################################
 ################ AutoBagging Regressor#################
 #######################################################
 print("\n\n\n***************** AutoBagging Regressor *****************")
-model = autoBaggingRegressor(meta_functions=meta_functions,
-                             post_processing_steps=post_processing_steps)
+model = autoBaggingRegressor()
 
 '''
 IN CASE THE PROGRAM FAIL'S WE CAN USE BACK UP DATA
